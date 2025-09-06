@@ -8,6 +8,14 @@
 
 - Proper proxmox TOML answer file jinja fixes/validation [docs](https://pve.proxmox.com/wiki/Automated_Installation)
 
+## GitOps Implementation
+
+- Create template repository structure with submodule management
+- Implement GitHub Actions for automated deployments
+- Create USB bootstrap process for GitHub connectivity
+- Design secure state and credential management strategy
+- Implement automated update mechanisms for deployed systems
+
 ## Documentation
 
 - Create some sample mermaid network diagrams showing VLANs and example devices
