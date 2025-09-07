@@ -280,4 +280,4 @@ If you don't find your answer here:
 ---
 
 **Last Updated**: 2025-01-12  
-**Have a question not covered here?** [Create an issue](https://github.com/FyberLabs/proxmox-firewall/issues/new) to help us improve this FAQ! 
+**Have a question not covered here?** [Create an issue](https://github.com/Brewnix/proxmox-firewall/issues/new) to help us improve this FAQ! 

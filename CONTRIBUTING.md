@@ -7,7 +7,7 @@ Thank you for your interest in contributing to the Proxmox Firewall project! Thi
 1. **Fork the repository** on GitHub
 2. **Clone your fork** locally:
    ```bash
-   git clone https://github.com/FyberLabs/proxmox-firewall.git
+   git clone https://github.com/brewnix/proxmox-firewall.git
    cd proxmox-firewall
    ```
 3. **Create a branch** for your feature:
@@ -152,7 +152,7 @@ git log --oneline -p | grep -i "password\|secret\|key" || echo "Clean"
 
 **🚨 If You Accidentally Commit Secrets:**
 1. **DO NOT** just delete the file - it's still in git history
-2. Contact security@fyberlabs.com immediately
+2. Contact security@brewnix.com immediately
 3. Rotate any exposed credentials
 4. Use `git-filter-branch` or BFG to clean history
 
@@ -325,7 +325,7 @@ yamllint config/sites/mysite.yml
 - **Issues**: Create issues for bugs and feature requests
 - **Documentation**: Check docs/ directory and README
 - **Examples**: Look at docker-test-framework/example-* configs
-- **Direct Contact**: github@fyberlabs.com for repository-related inquiries
+- **Direct Contact**: github@brewnix.com for repository-related inquiries
 
 ## 🏆 Recognition
 
@@ -355,4 +355,4 @@ Thank you for contributing to the Proxmox Firewall project! 🎉
 
 > **Note for Integrators:**
 > 
-> This repository is designed to be included as a submodule in your own infrastructure project. All user-specific configuration and secrets should be kept in your parent repo, not in this codebase. See the [main README section on submodule usage](README.md#-using-as-a-submodule-recommended-for-integrators) and [docs/SUBMODULE_STRATEGY.md](docs/SUBMODULE_STRATEGY.md) for details. For new projects, start from the [proxmox-firewall-template](https://github.com/FyberLabs/proxmox-firewall-template) (coming soon).
+> This repository is designed to be included as a submodule in your own infrastructure project. All user-specific configuration and secrets should be kept in your parent repo, not in this codebase. See the [main README section on submodule usage](README.md#-using-as-a-submodule-recommended-for-integrators) and [docs/SUBMODULE_STRATEGY.md](docs/SUBMODULE_STRATEGY.md) for details. For new projects, start from the [proxmox-firewall-template](https://github.com/brewnix/proxmox-firewall-template) (coming soon).

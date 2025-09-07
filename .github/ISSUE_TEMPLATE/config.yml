@@ -1,17 +1,17 @@
 blank_issues_enabled: false
 contact_links:
   - name: 🔒 Security Vulnerability
-    url: https://github.com/FyberLabs/proxmox-firewall/security/advisories/new
+    url: https://github.com/Brewnix/proxmox-firewall/security/advisories/new
     about: Report a security vulnerability privately
   - name: 💬 GitHub Discussions
-    url: https://github.com/FyberLabs/proxmox-firewall/discussions
+    url: https://github.com/Brewnix/proxmox-firewall/discussions
     about: Ask questions and discuss ideas with the community
   - name: 📖 Documentation
-    url: https://github.com/FyberLabs/proxmox-firewall/tree/main/docs
+    url: https://github.com/Brewnix/proxmox-firewall/tree/main/docs
     about: Browse the project documentation
   - name: 🔧 Troubleshooting Guide
-    url: https://github.com/FyberLabs/proxmox-firewall/blob/main/docs/TROUBLESHOOTING.md
+    url: https://github.com/Brewnix/proxmox-firewall/blob/main/docs/TROUBLESHOOTING.md
     about: Common issues and solutions
   - name: ❓ FAQ
-    url: https://github.com/FyberLabs/proxmox-firewall/blob/main/docs/reference/FAQ.md
+    url: https://github.com/Brewnix/proxmox-firewall/blob/main/docs/reference/FAQ.md
     about: Frequently asked questions

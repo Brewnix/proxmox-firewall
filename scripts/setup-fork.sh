@@ -35,13 +35,13 @@ if [ $# -eq 0 ]; then
     print_error "Usage: $0 <your-github-username>"
     echo ""
     echo "Example: $0 myusername"
-    echo "This will update all GitHub URLs from 'FyberLabs/proxmox-firewall' to 'myusername/proxmox-firewall'"
+    echo "This will update all GitHub URLs from 'Brewnix/proxmox-firewall' to 'myusername/proxmox-firewall'"
     exit 1
 fi
 
 USERNAME="$1"
 REPO_NAME="proxmox-firewall"
-OLD_URL="FyberLabs/proxmox-firewall"
+OLD_URL="Brewnix/proxmox-firewall"
 NEW_URL="${USERNAME}/${REPO_NAME}"
 
 print_header "=================================================="
@@ -97,10 +97,10 @@ update_file() {
     # Use sed to replace all instances of the old URL with the new URL
     if [[ "$OSTYPE" == "darwin"* ]]; then
         # macOS
-        sed -i '' "s|FyberLabs/proxmox-firewall|${NEW_URL}|g" "$file"
+        sed -i '' "s|Brewnix/proxmox-firewall|${NEW_URL}|g" "$file"
     else
         # Linux
-        sed -i "s|FyberLabs/proxmox-firewall|${NEW_URL}|g" "$file"
+        sed -i "s|Brewnix/proxmox-firewall|${NEW_URL}|g" "$file"
     fi
 }
 
@@ -129,19 +129,19 @@ for file in "${FILES_TO_UPDATE[@]}"; do
 done
 
 echo ""
-print_status "All instances of 'FyberLabs/proxmox-firewall' have been replaced with '${NEW_URL}'"
+print_status "All instances of 'Brewnix/proxmox-firewall' have been replaced with '${NEW_URL}'"
 echo ""
 
 # Verify changes
 print_header "Verification:"
 echo ""
-REMAINING=$(grep -r "FyberLabs/proxmox-firewall" README.md CONTRIBUTING.md docs/ deployment/ 2>/dev/null | wc -l || echo "0")
+REMAINING=$(grep -r "Brewnix/proxmox-firewall" README.md CONTRIBUTING.md docs/ deployment/ 2>/dev/null | wc -l || echo "0")
 if [ "$REMAINING" -eq 0 ]; then
-    print_status "✓ All FyberLabs URLs have been successfully updated"
+    print_status "✓ All Brewnix URLs have been successfully updated"
 else
-    print_warning "⚠ Found $REMAINING remaining FyberLabs URLs (may be in other files)"
+    print_warning "⚠ Found $REMAINING remaining Brewnix URLs (may be in other files)"
     print_status "Run this command to see remaining instances:"
-    echo "  grep -r 'FyberLabs/proxmox-firewall' ."
+    echo "  grep -r 'Brewnix/proxmox-firewall' ."
 fi
 
 echo ""

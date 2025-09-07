@@ -10,7 +10,7 @@ The Proxmox Firewall project takes security seriously. This document outlines ou
 
 **DO NOT** create public issues for security vulnerabilities. Instead:
 
-1. **Email**: Send details to `security@fyberlabs.com`
+1. **Email**: Send details to `security@brewnix.com`
 2. **Subject**: `[SECURITY] Proxmox Firewall - Brief Description`
 3. **Include**:
    - Detailed description of the vulnerability
@@ -327,8 +327,8 @@ ansible-playbook security/isolate_system.yml --limit compromised_host
 
 For critical security issues requiring immediate attention:
 
-- **Primary**: security@fyberlabs.com
+- **Primary**: security@brewnix.com
 
 ---
 
-For questions about this security policy, contact security@fyberlabs.com 
+For questions about this security policy, contact security@brewnix.com 

@@ -82,7 +82,7 @@ Using submodules for your infrastructure code enables strong separation of conce
 
 1. **Add the submodule**
    ```bash
-   git submodule add https://github.com/FyberLabs/proxmox-firewall vendor/proxmox-firewall
+   git submodule add https://github.com/Brewnix/proxmox-firewall vendor/proxmox-firewall
    git submodule update --init --recursive
    ```
 2. **Keep your config separate**
@@ -137,8 +137,8 @@ git commit -m "Update proxmox-firewall submodule to v0.44.0"
 
 ---
 
-For questions or suggestions, open an issue or discussion in the [proxmox-firewall repo](https://github.com/FyberLabs/proxmox-firewall).
+For questions or suggestions, open an issue or discussion in the [proxmox-firewall repo](https://github.com/Brewnix/proxmox-firewall).
 
 > **See also:**
 > - [Main README: Using as a Submodule](../README.md#-using-as-a-submodule-recommended-for-integrators)
-> - [proxmox-firewall-template](https://github.com/FyberLabs/proxmox-firewall-template) (starter repo for new projects) 
+> - [proxmox-firewall-template](https://github.com/Brewnix/proxmox-firewall-template) (starter repo for new projects) 

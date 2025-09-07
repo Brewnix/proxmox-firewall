@@ -107,7 +107,7 @@
   hosts: proxmox
   become: true
   vars:
-    repo_url: "{{ lookup('env', 'REPO_URL') | default('https://github.com/FyberLabs/proxmox-firewall.git') }}"
+    repo_url: "{{ lookup('env', 'REPO_URL') | default('https://github.com/Brewnix/proxmox-firewall.git') }}"
     repo_branch: "{{ lookup('env', 'REPO_BRANCH') | default('main') }}"
 
   tasks:

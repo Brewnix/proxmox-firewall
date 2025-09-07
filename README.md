@@ -18,7 +18,7 @@
 
 ## 🚀 Quick Start (Recommended: Template + Submodules)
 
-> **This project is designed to be used as a submodule in your own infrastructure repo. Start from the [proxmox-firewall-template](https://github.com/FyberLabs/proxmox-firewall-template) for best results.**
+> **This project is designed to be used as a submodule in your own infrastructure repo. Start from the [proxmox-firewall-template](https://github.com/Brewnix/proxmox-firewall-template) for best results.**
 
 ### Prerequisites
 
@@ -541,7 +541,7 @@ For most users, forking this repo is sufficient. For advanced users or integrato
 
 ### Official Project Template
 
-- See the [proxmox-firewall-template](https://github.com/FyberLabs/proxmox-firewall-template) (coming soon) for a ready-to-fork project structure with this repo as a submodule and example config.
+- See the [proxmox-firewall-template](https://github.com/Brewnix/proxmox-firewall-template) (coming soon) for a ready-to-fork project structure with this repo as a submodule and example config.
 
 ### Recommended Structure
 

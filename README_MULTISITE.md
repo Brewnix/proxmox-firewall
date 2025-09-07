@@ -7,7 +7,7 @@ This guide explains how to manage and deploy multiple firewall sites using the r
 ## 🚀 Overview
 
 - **Multi-site support** lets you manage any number of sites (locations, offices, homes, etc.) from a single infrastructure repository.
-- **Recommended workflow:** Use the [proxmox-firewall-template](https://github.com/FyberLabs/proxmox-firewall-template) as your parent repo, with `proxmox-firewall` as a submodule in `vendor/`.
+- **Recommended workflow:** Use the [proxmox-firewall-template](https://github.com/brewnix/proxmox-firewall-template) as your parent repo, with `proxmox-firewall` as a submodule in `vendor/`.
 - **All site-specific configuration** lives in `config/sites/` and `config/devices/` in your parent repo. The submodule contains only code, playbooks, and templates.
 
 > **See the [main README](README.md) for a high-level overview and project structure.**

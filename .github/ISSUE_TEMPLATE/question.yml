@@ -12,7 +12,7 @@ body:
 
         **Note**: For security vulnerabilities, please use our [Security Policy](../../SECURITY.md) instead of creating a public issue.
 
-        **Alternative**: For general repository inquiries or collaboration opportunities, you can also contact us directly at github@fyberlabs.com
+        **Alternative**: For general repository inquiries or collaboration opportunities, you can also contact us directly at github@brewnix.com
 
   - type: checkboxes
     id: prerequisites

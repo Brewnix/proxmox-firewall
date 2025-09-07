@@ -95,7 +95,7 @@
 
     - name: Clone repository to local path
       ansible.builtin.git:
-        repo: "{{ repo_url | default('https://github.com/FyberLabs/proxmox-firewall.git') }}"
+        repo: "{{ repo_url | default('https://github.com/Brewnix/proxmox-firewall.git') }}"
         dest: /opt/proxmox-firewall
         version: "{{ repo_branch | default('main') }}"
         force: true
