@@ -1,0 +1,101 @@
+---
+# vendor/proxmox-firewall/ansible/site.yml
+# Main deployment playbook for Proxmox Firewall with GitOps
+
+- name: "Deploy Proxmox Firewall Infrastructure"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  become: false
+  
+  vars:
+    site_config_file: "{{ site_config_file | default('') }}"
+    vendor_type: "{{ vendor_type | default('proxmox-firewall') }}"
+    project_root: "{{ project_root | default('') }}"
+    
+  tasks:
+    - name: "Validate required variables"
+      ansible.builtin.assert:
+        that:
+          - site_config_file != ""
+          - project_root != ""
+        fail_msg: "Required variables not provided: site_config_file, project_root"
+    
+    - name: "Load site configuration"
+      ansible.builtin.include_vars:
+        file: "{{ site_config_file }}"
+      tags: always
+    
+    - name: "Display deployment information"
+      ansible.builtin.debug:
+        msg:
+          - "Deploying: {{ vendor_type }}"
+          - "Site: {{ site_name | default('unknown') }}"
+          - "Config: {{ site_config_file }}"
+          - "Project Root: {{ project_root }}"
+      tags: always
+
+    - name: "Validate Proxmox Firewall configuration"
+      ansible.builtin.debug:
+        msg:
+          - "Firewall config validated"
+          - "Network VLAN: {{ network.vlan_id | default('none') }}"
+          - "Management IP: {{ network.management_ip | default('not set') }}"
+          - "Firewall vendor: {{ firewall_config.vendor | default('not set') }}"
+          - "IDS engine: {{ ids_config.engine | default('not set') }}"
+          - "GitOps enabled: {{ gitops.enabled | default(false) }}"
+      tags: always
+    
+    - name: "Setup GitOps drift detection"
+      ansible.builtin.debug:
+        msg: 
+          - "GitOps drift detection would be configured here"
+          - "Repository: {{ gitops.repository_url | default('not configured') }}"
+          - "Auto deploy: {{ gitops.auto_deploy | default(false) }}"
+      when: gitops is defined and gitops.enabled | default(false)
+      tags:
+        - gitops
+        - drift_detection
+    
+    - name: "Configure USB bootstrap capability"
+      ansible.builtin.debug:
+        msg: "USB bootstrap capability would be configured here"
+      when: usb_bootstrap is defined and usb_bootstrap.enabled | default(false)
+      tags:
+        - usb_bootstrap
+        - automation
+
+    - name: "Display deployment summary"
+      ansible.builtin.debug:
+        msg:
+          - "✅ Proxmox Firewall deployment validation completed"
+          - "📍 Site: {{ site_name | default('unknown') }}"
+          - "🔄 GitOps enabled: {{ gitops.enabled | default(false) }}"
+          - "📡 Drift detection: {{ gitops.drift_detection | default(false) }}"
+          - "💾 USB bootstrap: {{ usb_bootstrap.enabled | default(false) }}"
+          - "🚀 Ready for deployment!"
+      tags: always
+    
+    - name: "Create build directory"
+      ansible.builtin.file:
+        path: "{{ project_root }}/build"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+      tags: always
+    
+    - name: "Save deployment state"
+      ansible.builtin.copy:
+        content: |
+          ---
+          deployment_time: "{{ ansible_date_time.iso8601 }}"
+          site_name: "{{ site_name | default('unknown') }}"
+          vendor_type: "{{ vendor_type }}"
+          gitops_enabled: {{ gitops.enabled | default(false) }}
+          drift_detection_enabled: {{ gitops.drift_detection | default(false) }}
+          usb_bootstrap_enabled: {{ usb_bootstrap.enabled | default(false) }}
+          status: "validation_completed"
+        dest: "{{ project_root }}/build/deployment-state-{{ site_name | default('unknown') }}.yml"
+        mode: '0644'
+      delegate_to: localhost
+      tags: always

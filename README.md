@@ -16,39 +16,49 @@
 
 ---
 
-## 🚀 Quick Start (Recommended: Template + Submodules)
+## 🚀 Quick Start (Modern GitOps Deployment)
 
-> **This project is designed to be used as a submodule in your own infrastructure repo. Start from the [proxmox-firewall-template](https://github.com/Brewnix/proxmox-firewall-template) for best results.**
+> **Proxmox Firewall now uses modern GitOps deployment with USB bootstrapping and continuous drift detection, replacing the legacy proxmox-local approach.**
 
 ### Prerequisites
 
 - Ubuntu 20.04+ or similar Linux distribution
 - 8GB+ RAM, 50GB+ storage for development
-- Network access for downloading images
+- Git repository for GitOps configuration management
+- Tailscale authentication key for VPN setup
 
-### 1. Fork and Clone the Template Repo
+### 1. GitOps Deployment (Recommended)
 
 ```bash
-# Fork the template repo to your GitHub account
-# Then clone your fork:
-git clone https://github.com/YOUR-USERNAME/proxmox-firewall-template.git my-infra-project
-cd my-infra-project
+# Deploy with GitOps repository
+./vendor/proxmox-firewall/gitops/deploy-gitops.sh \
+  --operation deploy \
+  --gitops-repo https://github.com/yourorg/firewall-config.git \
+  config/sites/your-site/firewall-site.yml
 
-# Initialize submodules (including proxmox-firewall)
-git submodule update --init --recursive
+# Enable continuous drift detection
+sudo systemctl enable brewnix-drift-detection.timer
+sudo systemctl start brewnix-drift-detection.timer
 ```
 
-### 2. Install Dependencies
+### 2. USB Bootstrap Deployment (Zero-Touch)
 
 ```bash
-./vendor/proxmox-firewall/deployment/scripts/prerequisites.sh
+# Create USB bootstrap image
+./vendor/proxmox-firewall/gitops/deploy-gitops.sh \
+  --operation usb-create \
+  --usb-device /dev/sdb \
+  config/sites/your-site/firewall-site.yml
+
+# Insert USB into Proxmox server and run:
+# /media/usb/bootstrap.sh
 ```
 
-### 3. Create Site Configuration
+### 3. Traditional Deployment (Legacy Support)
 
 ```bash
-./vendor/proxmox-firewall/deployment/scripts/create_site_config.sh
-./vendor/proxmox-firewall/validate-config.sh <site_name>
+# Use the vendor deployment system
+../../scripts/deploy-vendor.sh proxmox-firewall config/sites/your-site/firewall-site.yml
 ```
 
 ### 4. Configure Your Project
@@ -636,10 +646,171 @@ flowchart TD
     CAM --> CAM1
     IOT --> IOT1
     GUEST --> GUEST1
-    MGMT --> MGMT1
     style LAN fill:#eaffea,stroke:#28a745
     style CAM fill:#ffeaea,stroke:#d63333
     style IOT fill:#eafffa,stroke:#33d6b3
     style GUEST fill:#f0eaff,stroke:#7d33d6
     style MGMT fill:#eaf0ff,stroke:#3366d6
 ```
+
+---
+
+## 🔄 GitOps Migration Guide
+
+> **The Proxmox Firewall project has been modernized with GitOps deployment, replacing the legacy proxmox-local approach. This section documents the migration path and new features.**
+
+### What Changed
+
+#### Legacy Approach (proxmox-local)
+- Manual configuration copying to `/opt/proxmox-firewall/`
+- Static deployment scripts run locally on Proxmox
+- Manual drift detection and configuration management
+- Limited automation and error-prone updates
+
+#### Modern Approach (GitOps)
+- **Configuration as Code**: All configurations stored in Git repositories
+- **Automated Drift Detection**: Continuous monitoring with 5-minute intervals
+- **USB Bootstrap**: Zero-touch deployment via USB devices  
+- **Webhook Notifications**: Real-time alerts for configuration changes
+- **Automatic Sync**: GitOps repository changes trigger automatic updates
+
+### Migration Steps
+
+#### 1. Backup Existing Configuration
+```bash
+# Backup legacy proxmox-local configuration
+cp -r vendor/proxmox-firewall/proxmox-local-legacy/ backup/
+```
+
+#### 2. Setup GitOps Repository
+```bash
+# Create or use existing GitOps repository
+git clone https://github.com/yourorg/firewall-config.git
+cd firewall-config
+
+# Initialize configuration structure
+mkdir -p config/sites/your-site
+cp backup/proxmox-local-legacy/config/site.yml config/sites/your-site/firewall-site.yml
+```
+
+#### 3. Deploy with GitOps
+```bash
+# Modern deployment with drift detection
+./vendor/proxmox-firewall/gitops/deploy-gitops.sh \
+  --operation deploy \
+  --gitops-repo https://github.com/yourorg/firewall-config.git \
+  config/sites/your-site/firewall-site.yml
+```
+
+#### 4. Enable Continuous Monitoring
+```bash
+# Start drift detection service
+sudo systemctl enable brewnix-drift-detection.timer
+sudo systemctl start brewnix-drift-detection.timer
+
+# Check service status
+systemctl status brewnix-drift-detection.timer
+```
+
+### New GitOps Features
+
+#### Drift Detection
+- **Continuous Monitoring**: Checks every 5 minutes for configuration changes
+- **GitOps Sync**: Automatically detects and applies repository updates
+- **System Validation**: Monitors VM state, firewall rules, and service health
+- **Alert Integration**: Slack/webhook notifications for drift events
+
+#### USB Bootstrap
+- **Zero-Touch Deployment**: Create bootable USB with embedded configuration
+- **Automated Setup**: Complete infrastructure deployment from USB device
+- **SSH Key Injection**: Automatic SSH access configuration
+- **Network Bootstrap**: Automatic network configuration and Git cloning
+
+#### GitOps Operations
+```bash
+# Check for configuration drift
+./gitops/deploy-gitops.sh --operation drift-check site-config.yml
+
+# Sync from GitOps repository  
+./gitops/deploy-gitops.sh --operation sync site-config.yml
+
+# Create USB bootstrap image
+./gitops/deploy-gitops.sh --operation usb-create --usb-device /dev/sdb site-config.yml
+
+# Backup current configuration
+./gitops/deploy-gitops.sh --operation backup site-config.yml
+```
+
+### Configuration Management
+
+#### Environment Variables
+```bash
+# Required for GitOps deployment
+export TAILSCALE_AUTH_KEY="your-tailscale-key"
+export GRAFANA_ADMIN_PASSWORD="secure-password"
+
+# Optional for advanced features
+export GITOPS_WEBHOOK_URL="https://hooks.slack.com/..."
+export AWS_ACCESS_KEY_ID="your-access-key"
+export AWS_SECRET_ACCESS_KEY="your-secret-key"
+export BACKUP_S3_BUCKET="firewall-backups"
+```
+
+#### Drift Detection Configuration
+```bash
+# Configure drift detection intervals
+export DRIFT_CHECK_INTERVAL=300  # 5 minutes
+
+# Configure GitOps repository
+export GITOPS_REPO="https://github.com/yourorg/firewall-config.git"
+
+# Configure site configuration
+export SITE_CONFIG="/path/to/firewall-site.yml"
+```
+
+### Legacy Support
+
+The legacy `proxmox-local` approach is still supported but deprecated:
+
+```bash
+# Legacy deployment (deprecated)
+cd vendor/proxmox-firewall/proxmox-local-legacy/ansible
+ansible-playbook -i inventory/hosts.yml site.yml
+```
+
+### Benefits of GitOps Approach
+
+- **🔄 Automated Updates**: GitOps repository changes trigger automatic deployment
+- **📊 Drift Detection**: Continuous monitoring prevents configuration drift  
+- **🔧 Zero-Touch Deploy**: USB bootstrap eliminates manual setup
+- **📱 Real-Time Alerts**: Webhook notifications for all configuration changes
+- **📦 Version Control**: Full audit trail of all infrastructure changes
+- **🛡️ Security**: Immutable infrastructure with automated rollback
+- **⚡ Fast Recovery**: USB bootstrap enables rapid disaster recovery
+
+### Troubleshooting
+
+#### Drift Detection Issues
+```bash
+# Check drift detection service
+journalctl -u brewnix-drift-detection -f
+
+# Manual drift check
+./gitops/drift-detector.sh --check-once --site-config site.yml
+
+# View drift state
+cat /var/lib/brewnix/drift-state.json
+```
+
+#### GitOps Sync Problems
+```bash
+# Manual GitOps sync
+./gitops/deploy-gitops.sh --operation sync --verbose site.yml
+
+# Check GitOps repository status
+git -C /tmp/gitops-repo status
+```
+
+---
+
+**Proxmox Firewall with GitOps: Enterprise-grade security infrastructure with modern automation! 🔥**
