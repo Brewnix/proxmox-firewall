@@ -390,6 +390,169 @@ EOF
 }
 
 # Deploy firewall infrastructure
+# Network-aware deployment functions for sophisticated firewall management
+
+validate_site_network_config() {
+    log_info "Validating site network configuration..."
+    
+    # Check if site configuration exists
+    if [[ ! -f "$SITE_CONFIG" ]]; then
+        log_error "Site configuration file not found: $SITE_CONFIG"
+        return 1
+    fi
+    
+    # Extract site name from config path 
+    local site_name=$(basename "$(dirname "$(dirname "$SITE_CONFIG")")")
+    export DETERMINED_SITE_NAME="$site_name"
+    
+    # Validate network prefix configuration
+    if ! grep -q "network_prefix:" "$SITE_CONFIG"; then
+        log_error "Network prefix not configured in site config"
+        return 1
+    fi
+    
+    # Check for VLAN configuration
+    if ! grep -q "vlans:" "$SITE_CONFIG"; then
+        log_error "VLAN configuration missing from site config"
+        return 1
+    fi
+    
+    # Validate device templates directory exists
+    local devices_templates_dir="${PROJECT_ROOT}/config/devices_templates"
+    if [[ ! -d "$devices_templates_dir" ]]; then
+        log_error "Device templates directory not found: $devices_templates_dir"
+        return 1
+    fi
+    
+    log_success "Site network configuration validation passed"
+    return 0
+}
+
+deploy_network_infrastructure() {
+    log_info "Deploying network infrastructure with VLAN support..."
+    
+    local site_name="${DETERMINED_SITE_NAME:-$(basename "$(dirname "$(dirname "$SITE_CONFIG")")")}"
+    
+    # Use the sophisticated network setup playbook
+    local network_playbooks=(
+        "06_initial_local_setup.yml"
+        "03a_network_transition.yml"
+        "03_network_setup.yml"
+    )
+    
+    cd "${VENDOR_ROOT}/deployment/ansible"
+    
+    for playbook in "${network_playbooks[@]}"; do
+        log_info "Running network playbook: $playbook"
+        
+        local ansible_cmd=(
+            "ansible-playbook"
+            "playbooks/$playbook"
+            "-i" "inventory/localhost"
+            "-e" "config_root=${PROJECT_ROOT}/config/proxmox-firewall"
+            "-e" "site=$site_name"
+        )
+        
+        if [[ "$VERBOSE" == "true" ]]; then
+            ansible_cmd+=("-vvv")
+        fi
+        
+        if ! "${ansible_cmd[@]}"; then
+            log_error "Network playbook failed: $playbook"
+            return 1
+        fi
+    done
+    
+    log_success "Network infrastructure deployment completed"
+    return 0
+}
+
+deploy_device_configurations() {
+    log_info "Deploying device configurations from templates..."
+    
+    local site_name="${DETERMINED_SITE_NAME:-$(basename "$(dirname "$(dirname "$SITE_CONFIG")")")}"
+    local devices_dir="${PROJECT_ROOT}/config/proxmox-firewall/sites/${site_name}/devices"
+    local templates_dir="${PROJECT_ROOT}/config/devices_templates"
+    local render_script="${VENDOR_ROOT}/deployment/scripts/render_template.py"
+    
+    # Check if device configurations exist
+    if [[ ! -d "$devices_dir" ]]; then
+        log_warning "No device configurations found for site: $site_name"
+        return 0
+    fi
+    
+    # Process each device configuration
+    for device_config in "$devices_dir"/*.yml; do
+        if [[ -f "$device_config" ]]; then
+            local device_name=$(basename "$device_config" .yml)
+            log_info "Processing device configuration: $device_name"
+            
+            # Extract template name from device config
+            local template_name=$(grep "^template:" "$device_config" | cut -d' ' -f2- | tr -d '"' || echo "")
+            
+            if [[ -n "$template_name" ]]; then
+                local template_file="${templates_dir}/${template_name}"
+                if [[ -f "$template_file" ]]; then
+                    log_debug "Rendering template $template_name for device $device_name"
+                    
+                    # Render device configuration
+                    if ! python3 "$render_script" "$device_config" -t "$templates_dir"; then
+                        log_error "Failed to render device configuration: $device_name"
+                        return 1
+                    fi
+                else
+                    log_warning "Template not found: $template_file"
+                fi
+            fi
+        fi
+    done
+    
+    log_success "Device configuration deployment completed"
+    return 0
+}
+
+deploy_firewall_security() {
+    log_info "Deploying firewall security policies and rules..."
+    
+    local site_name="${DETERMINED_SITE_NAME:-$(basename "$(dirname "$(dirname "$SITE_CONFIG")")")}"
+    
+    # Deploy OPNsense and security configurations
+    cd "${VENDOR_ROOT}/deployment/ansible"
+    
+    local security_playbooks=(
+        "05_opnsense_setup.yml"
+        "08_monitoring_setup.yml"
+    )
+    
+    for playbook in "${security_playbooks[@]}"; do
+        if [[ -f "playbooks/$playbook" ]]; then
+            log_info "Running security playbook: $playbook"
+            
+            local ansible_cmd=(
+                "ansible-playbook"
+                "playbooks/$playbook"
+                "-i" "inventory/localhost"
+                "-e" "config_root=${PROJECT_ROOT}/config/proxmox-firewall"
+                "-e" "site=$site_name"
+            )
+            
+            if [[ "$VERBOSE" == "true" ]]; then
+                ansible_cmd+=("-vvv")
+            fi
+            
+            if ! "${ansible_cmd[@]}"; then
+                log_error "Security playbook failed: $playbook"
+                return 1
+            fi
+        else
+            log_debug "Security playbook not found: $playbook"
+        fi
+    done
+    
+    log_success "Firewall security deployment completed"
+    return 0
+}
+
 deploy_firewall() {
     log_info "Deploying Proxmox Firewall infrastructure with GitOps..."
     
@@ -398,12 +561,36 @@ deploy_firewall() {
         setup_gitops
     fi
     
-    # Run Ansible deployment
-    log_info "Executing Ansible deployment..."
+    # Network-aware deployment that preserves sophisticated firewall capabilities
+    log_info "Executing network-aware firewall deployment..."
     
     cd "$PROJECT_ROOT"
     
-    # Use the vendor deployment script
+    # 1. Validate site configuration and network setup
+    if ! validate_site_network_config; then
+        log_error "Site network configuration validation failed"
+        return 1
+    fi
+    
+    # 2. Deploy core network infrastructure with VLAN management
+    if ! deploy_network_infrastructure; then
+        log_error "Network infrastructure deployment failed"
+        return 1
+    fi
+    
+    # 3. Deploy device templates and generate configurations
+    if ! deploy_device_configurations; then
+        log_error "Device configuration deployment failed"
+        return 1
+    fi
+    
+    # 4. Deploy firewall rules and security policies
+    if ! deploy_firewall_security; then
+        log_error "Firewall security deployment failed"
+        return 1
+    fi
+    
+    # 5. Run the vendor deployment script for remaining components
     local deploy_cmd=(
         "${VENDOR_ROOT}/scripts/deploy-vendor.sh"
         "proxmox-firewall"
@@ -414,12 +601,12 @@ deploy_firewall() {
         deploy_cmd+=("-vvv")
     fi
     
-    log_debug "Running: ${deploy_cmd[*]}"
+    log_debug "Running vendor deployment: ${deploy_cmd[*]}"
     
     if "${deploy_cmd[@]}"; then
-        log_success "Ansible deployment completed successfully"
+        log_success "Vendor deployment completed successfully"
     else
-        log_error "Ansible deployment failed"
+        log_error "Vendor deployment failed"
         return 1
     fi
     
@@ -429,7 +616,7 @@ deploy_firewall() {
     # Perform initial drift check
     check_drift || true
     
-    log_success "GitOps deployment completed successfully"
+    log_success "Network-aware GitOps deployment completed successfully"
 }
 
 # Setup drift detection service
@@ -492,7 +679,7 @@ sync_gitops() {
         exit 1
     fi
     
-    log_info "Syncing configuration from GitOps repository..."
+    log_info "Syncing network configuration from GitOps repository..."
     
     setup_gitops
     
@@ -505,16 +692,50 @@ sync_gitops() {
         return 0
     fi
     
-    log_info "Changes detected, applying configuration..."
+    log_info "Network configuration changes detected, applying..."
     
-    # Copy updated configuration
-    if [[ -f "config/sites/${SITE_NAME}/firewall-site.yml" ]]; then
-        cp "config/sites/${SITE_NAME}/firewall-site.yml" "$SITE_CONFIG"
-        log_info "Updated site configuration from GitOps repository"
+    # Sync complete site configuration including network and device configs
+    local site_name="${SITE_NAME:-$(basename "$(dirname "$(dirname "$SITE_CONFIG")")")}"
+    local gitops_site_dir="config/sites/${site_name}"
+    local local_site_dir="${PROJECT_ROOT}/config/proxmox-firewall/sites/${site_name}"
+    
+    if [[ -d "$gitops_site_dir" ]]; then
+        log_info "Syncing complete site configuration for: $site_name"
+        
+        # Backup current configuration
+        backup_config
+        
+        # Copy updated site configuration
+        if [[ -f "${gitops_site_dir}/config/site.conf" ]]; then
+            cp "${gitops_site_dir}/config/site.conf" "${local_site_dir}/config/site.conf"
+            log_info "Updated site configuration from GitOps"
+        fi
+        
+        # Copy device configurations if they exist
+        if [[ -d "${gitops_site_dir}/devices" ]]; then
+            cp -r "${gitops_site_dir}/devices/"* "${local_site_dir}/devices/" 2>/dev/null || true
+            log_info "Updated device configurations from GitOps"
+        fi
+        
+        # Copy any custom templates
+        if [[ -d "${gitops_site_dir}/templates" ]]; then
+            cp -r "${gitops_site_dir}/templates/"* "${PROJECT_ROOT}/config/devices_templates/" 2>/dev/null || true
+            log_info "Updated device templates from GitOps"
+        fi
+        
+        # Validate the updated configuration
+        if ! validate_site_network_config; then
+            log_error "Updated configuration validation failed, restoring backup"
+            restore_backup
+            return 1
+        fi
+        
+        # Deploy with updated network-aware configuration
+        deploy_firewall
+    else
+        log_warning "GitOps site directory not found: $gitops_site_dir"
+        return 1
     fi
-    
-    # Redeploy with updated configuration
-    deploy_firewall
 }
 
 # Validate site configuration
@@ -577,6 +798,54 @@ EOF
     rm -rf "$backup_dir"
     
     log_success "Configuration backup completed"
+}
+
+# Restore configuration from latest backup
+restore_backup() {
+    log_info "Restoring configuration from backup..."
+    
+    local backups_dir="${BUILD_DIR}/backups"
+    if [[ ! -d "$backups_dir" ]]; then
+        log_error "No backups directory found"
+        return 1
+    fi
+    
+    # Find latest backup for this site
+    local latest_backup
+    latest_backup=$(find "$backups_dir" -name "backup-${SITE_NAME}-*.tar.gz" -type f | sort -r | head -n 1)
+    
+    if [[ -z "$latest_backup" ]]; then
+        log_error "No backup found for site: $SITE_NAME"
+        return 1
+    fi
+    
+    log_info "Restoring from backup: $(basename "$latest_backup")"
+    
+    # Extract and restore
+    local restore_dir
+    restore_dir=$(mktemp -d)
+    cd "$restore_dir"
+    tar -xzf "$latest_backup"
+    
+    # Restore site configuration
+    local extracted_dir
+    extracted_dir=$(find . -type d -name "backup-*" | head -n 1)
+    if [[ -f "${extracted_dir}/site-config.yml" ]]; then
+        cp "${extracted_dir}/site-config.yml" "$SITE_CONFIG"
+        log_info "Site configuration restored"
+    fi
+    
+    # Restore GitOps repository if available
+    if [[ -d "${extracted_dir}/gitops-repo" ]]; then
+        rm -rf "${BUILD_DIR}/gitops-repo"
+        cp -r "${extracted_dir}/gitops-repo" "${BUILD_DIR}/gitops-repo"
+        log_info "GitOps repository restored"
+    fi
+    
+    # Cleanup
+    rm -rf "$restore_dir"
+    
+    log_success "Configuration restore completed"
 }
 
 # Main execution function

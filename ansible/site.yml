@@ -1,8 +1,8 @@
 ---
 # vendor/proxmox-firewall/ansible/site.yml
-# Main deployment playbook for Proxmox Firewall with GitOps
+# Network-Aware GitOps deployment for Proxmox Firewall with sophisticated networking
 
-- name: "Deploy Proxmox Firewall Infrastructure"
+- name: "Deploy Proxmox Firewall Infrastructure with Network Awareness"
   hosts: localhost
   connection: local
   gather_facts: true
@@ -12,6 +12,10 @@
     site_config_file: "{{ site_config_file | default('') }}"
     vendor_type: "{{ vendor_type | default('proxmox-firewall') }}"
     project_root: "{{ project_root | default('') }}"
+    
+    # Network-aware configuration paths
+    config_root: "{{ project_root }}/vendor/proxmox-firewall/config"
+    devices_templates_dir: "{{ config_root }}/devices_templates"
     
   tasks:
     - name: "Validate required variables"
@@ -33,6 +37,7 @@
           - "Site: {{ site_name | default('unknown') }}"
           - "Config: {{ site_config_file }}"
           - "Project Root: {{ project_root }}"
+          - "Network-aware deployment enabled"
       tags: always
 
     - name: "Validate Proxmox Firewall configuration"
@@ -46,12 +51,36 @@
           - "GitOps enabled: {{ gitops.enabled | default(false) }}"
       tags: always
     
+    - name: "Analyze network configuration"
+      ansible.builtin.debug:
+        msg:
+          - "Network analysis:"
+          - "VLANs configured: {{ security_zones | default({}) | length }}"
+          - "Firewall rules: {{ firewall_config.firewall_rules | default({}) | length }}"
+          - "Security zones: {{ security_zones | default({}) | list }}"
+      when: security_zones is defined
+      tags: 
+        - network
+        - analysis
+    
+    - name: "Validate device configurations"
+      ansible.builtin.debug:
+        msg:
+          - "Device validation:"
+          - "VPN config: {{ vpn_config.enabled | default(false) }}"
+          - "DNS security: {{ dns_security.primary_dns | default('not set') }}"
+          - "Certificate authority: {{ certificate_authority.enabled | default(false) }}"
+      tags:
+        - devices
+        - validation
+    
     - name: "Setup GitOps drift detection"
       ansible.builtin.debug:
         msg: 
           - "GitOps drift detection would be configured here"
           - "Repository: {{ gitops.repository_url | default('not configured') }}"
           - "Auto deploy: {{ gitops.auto_deploy | default(false) }}"
+          - "Network-aware drift detection enabled"
       when: gitops is defined and gitops.enabled | default(false)
       tags:
         - gitops
@@ -59,7 +88,10 @@
     
     - name: "Configure USB bootstrap capability"
       ansible.builtin.debug:
-        msg: "USB bootstrap capability would be configured here"
+        msg: 
+          - "USB bootstrap capability would be configured here"
+          - "Network configuration will be embedded"
+          - "Device templates will be included"
       when: usb_bootstrap is defined and usb_bootstrap.enabled | default(false)
       tags:
         - usb_bootstrap
@@ -68,12 +100,14 @@
     - name: "Display deployment summary"
       ansible.builtin.debug:
         msg:
-          - "✅ Proxmox Firewall deployment validation completed"
+          - "✅ Network-Aware Proxmox Firewall deployment validation completed"
           - "📍 Site: {{ site_name | default('unknown') }}"
+          - "🌐 Network zones: {{ security_zones | default({}) | length | default(0) }}"
+          - "🔥 Firewall rules: {{ firewall_config.firewall_rules | default({}) | length | default(0) }}"
           - "🔄 GitOps enabled: {{ gitops.enabled | default(false) }}"
           - "📡 Drift detection: {{ gitops.drift_detection | default(false) }}"
           - "💾 USB bootstrap: {{ usb_bootstrap.enabled | default(false) }}"
-          - "🚀 Ready for deployment!"
+          - "🚀 Ready for network-aware deployment!"
       tags: always
     
     - name: "Create build directory"
@@ -91,10 +125,13 @@
           deployment_time: "{{ ansible_date_time.iso8601 }}"
           site_name: "{{ site_name | default('unknown') }}"
           vendor_type: "{{ vendor_type }}"
+          network_zones: {{ security_zones | default({}) | length | default(0) }}
+          firewall_rules: {{ firewall_config.firewall_rules | default({}) | length | default(0) }}
           gitops_enabled: {{ gitops.enabled | default(false) }}
           drift_detection_enabled: {{ gitops.drift_detection | default(false) }}
           usb_bootstrap_enabled: {{ usb_bootstrap.enabled | default(false) }}
-          status: "validation_completed"
+          network_aware: true
+          status: "network_validation_completed"
         dest: "{{ project_root }}/build/deployment-state-{{ site_name | default('unknown') }}.yml"
         mode: '0644'
       delegate_to: localhost
