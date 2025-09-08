@@ -1,0 +1,40 @@
+name: Validate
+on:
+  push:
+    paths:
+      - 'config.yml'
+      - 'config/**'
+      - 'scripts/core/**'
+  pull_request:
+    paths:
+      - 'config.yml'
+      - 'config/**'
+      - 'scripts/core/**'
+  workflow_dispatch:
+
+jobs:
+  config-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Environment
+        run: ./dev-setup.sh
+
+      - name: Validate Configuration Schema
+        run: ./validate-config.sh
+
+      - name: Check Core Module Integrity
+        run: |
+          ./scripts/core/init.sh
+          ./scripts/core/config.sh
+          ./scripts/core/logging.sh
+
+      - name: Verify Directory Structure
+        run: |
+          [[ -d "scripts/core" ]] && echo "✅ Core scripts directory exists"
+          [[ -d "tests/core" ]] && echo "✅ Core tests directory exists"
+          [[ -d "logs" ]] && echo "✅ Logs directory exists"
+          [[ -f "validate-config.sh" ]] && echo "✅ Config validator exists"
+          [[ -f "dev-setup.sh" ]] && echo "✅ Dev setup script exists"
+          [[ -f "local-test.sh" ]] && echo "✅ Local test script exists"

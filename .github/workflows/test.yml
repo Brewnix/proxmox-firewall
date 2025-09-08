@@ -1,159 +1,38 @@
-name: Proxmox Firewall Tests
-
+name: Test
 on:
   push:
     branches: [ main, develop ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, develop ]
+  workflow_dispatch:
 
 jobs:
   unit-tests:
-    name: Unit and Static Tests
     runs-on: ubuntu-latest
-
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
+      - name: Setup Environment
+        run: ./dev-setup.sh
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pytest pyyaml
+      - name: Run Core Tests
+        run: |
+          ./tests/core/test_config.sh
+          ./tests/core/test_logging.sh
 
-    - name: Install Ansible (for syntax checking)
-      run: |
-        pip install ansible
+      - name: Run Integration Tests
+        run: ./tests/integration/test_deployment.sh
 
-    - name: Install Terraform
-      uses: hashicorp/setup-terraform@v3
-      with:
-        terraform_version: 1.12.1
-
-    - name: Run unit tests
-      run: |
-        python -m pytest tests/ -v --tb=short
-
-    - name: Validate Ansible playbooks
-      run: |
-        ansible-playbook --syntax-check deployment/ansible/playbooks/*.yml
-
-    - name: Validate Terraform configuration
-      run: |
-        cd common/terraform
-        terraform init
-        terraform validate
-
-  comprehensive-tests:
-    name: Comprehensive Test Suite
+  validation:
     runs-on: ubuntu-latest
-    needs: unit-tests
-
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
+      - name: Setup Environment
+        run: ./dev-setup.sh
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      - name: Validate Configuration
+        run: ./validate-config.sh
 
-    - name: Install Docker Compose
-      run: |
-        sudo curl -L "https://github.com/docker/compose/releases/download/v2.21.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-        sudo chmod +x /usr/local/bin/docker-compose
-
-    - name: Install Python dependencies for integration tests
-      run: |
-        python -m pip install --upgrade pip
-        pip install pyyaml requests pytest
-
-    - name: Run comprehensive test suite
-      run: |
-        cd docker-test-framework
-        chmod +x run-comprehensive-tests.sh
-        ./run-comprehensive-tests.sh --verbose
-
-    - name: Upload test results
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: comprehensive-test-results
-        path: |
-          docker-test-framework/test-results/
-          docker-test-framework/reports/
-
-    - name: Upload test logs
-      uses: actions/upload-artifact@v4
-      if: failure()
-      with:
-        name: comprehensive-test-logs
-        path: docker-test-framework/logs/
-
-  config-validation:
-    name: Configuration Validation
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pyyaml jsonschema
-
-    - name: Validate site template
-      run: |
-        python -c "
-        import yaml
-        with open('config/site_template.yml', 'r') as f:
-            config = yaml.safe_load(f)
-        print('✓ Site template is valid YAML')
-        assert 'site' in config
-        print('✓ Site template has required structure')
-        "
-
-    - name: Validate example site config
-      run: |
-        python -c "
-        import yaml
-        with open('docker-test-framework/example-site.yml', 'r') as f:
-            config = yaml.safe_load(f)
-        print('✓ Example site config is valid YAML')
-        assert config['site']['name'] == 'example-site'
-        print('✓ Example site config has correct structure')
-        "
-
-    - name: Check for any user site configs
-      run: |
-        if [ -d "config/sites" ] && [ "$(ls -A config/sites)" ]; then
-          echo "Found user site configurations, validating..."
-          for site_file in config/sites/*.yml; do
-            if [ -f "$site_file" ]; then
-              echo "Validating $site_file"
-              python -c "
-              import yaml
-              import sys
-              try:
-                  with open('$site_file', 'r') as f:
-                      config = yaml.safe_load(f)
-                  print('✓ $site_file is valid YAML')
-              except Exception as e:
-                  print('✗ $site_file has YAML error: {e}')
-                  sys.exit(1)
-              "
-            fi
-          done
-        else
-          echo "No user site configurations found (this is normal for CI)"
-        fi
+      - name: Check Prerequisites
+        run: ./scripts/core/init.sh

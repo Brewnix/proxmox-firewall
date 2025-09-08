@@ -1,0 +1,13 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Environment
+        run: ./dev-setup.sh
+      - name: Run Tests
+        run: ./local-test.sh
+      - name: Validate Configuration
+        run: ./validate-config.sh
