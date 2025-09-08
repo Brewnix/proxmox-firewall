@@ -1,399 +1,174 @@
 #!/bin/bash
-# Quick Configuration Validation Script
-# Validates site configurations and deployment readiness
+# templates/submodule-core/validate-config.sh - Configuration validation script
 
-# Auto-detect config root
-if [ -z "$PROXMOX_FW_CONFIG_ROOT" ]; then
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    PARENT_REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-    export PROXMOX_FW_CONFIG_ROOT="${PARENT_REPO_ROOT}/config"
+# Source core modules
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# In template context, modules are in root, in submodule context they're in scripts/core/
+if [[ -f "${SCRIPT_DIR}/init.sh" && -f "${SCRIPT_DIR}/config.sh" && -f "${SCRIPT_DIR}/logging.sh" ]]; then
+    source "${SCRIPT_DIR}/init.sh"
+    source "${SCRIPT_DIR}/config.sh"
+    source "${SCRIPT_DIR}/logging.sh"
+elif [[ -f "${SCRIPT_DIR}/scripts/core/init.sh" && -f "${SCRIPT_DIR}/scripts/core/config.sh" && -f "${SCRIPT_DIR}/scripts/core/logging.sh" ]]; then
+    source "${SCRIPT_DIR}/scripts/core/init.sh"
+    source "${SCRIPT_DIR}/scripts/core/config.sh"
+    source "${SCRIPT_DIR}/scripts/core/logging.sh"
+else
+    echo "❌ Cannot find core modules to source"
+    exit 1
 fi
 
-set -euo pipefail
+# Validation functions
+validate_site_config() {
+    local config_file="$1"
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
-
-log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-}
-
-log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
-}
-
-log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
-
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
-usage() {
-    echo "Usage: $0 [SITE_NAME]"
-    echo ""
-    echo "Validates site configuration and deployment readiness"
-    echo ""
-    echo "Arguments:"
-    echo "  SITE_NAME    Name of site to validate (optional, validates all if not specified)"
-    echo ""
-    echo "Examples:"
-    echo "  $0           # Validate all site configurations"
-    echo "  $0 mysite    # Validate specific site configuration"
-}
-
-validate_yaml_syntax() {
-    local file="$1"
-
-    if ! python3 -c "import yaml; yaml.safe_load(open('$file'))" 2>/dev/null; then
-        log_error "YAML syntax error in: $file"
+    if [[ ! -f "$config_file" ]]; then
+        log_error "Configuration file not found: $config_file"
         return 1
     fi
 
-    return 0
-}
-
-validate_site_structure() {
-    local file="$1"
-    local site_name="$(basename "$file" .yml)"
-
-    log_info "Validating structure of $site_name..."
-
-    # Use Python to validate structure
-    python3 -c "
-import yaml
-import sys
-
-try:
-    with open('$file', 'r') as f:
-        config = yaml.safe_load(f)
-
-    # Check top-level structure
-    if 'site' not in config:
-        print('✗ Missing top-level \"site\" section')
-        sys.exit(1)
-
-    site = config['site']
+    log_info "Validating site configuration: $config_file"
 
     # Check required fields
-    required_fields = ['name', 'display_name', 'network_prefix', 'domain', 'proxmox']
-    for field in required_fields:
-        if field not in site:
-            print(f'✗ Missing required field: {field}')
-            sys.exit(1)
+    local required_fields=("site.name" "site.description" "site.network.prefix")
 
-    # Check proxmox section
-    if 'host' not in site['proxmox']:
-        print('✗ Missing proxmox.host')
-        sys.exit(1)
-
-    # Check network consistency if hardware section exists
-    if 'hardware' in site and 'network' in site['hardware']:
-        network_prefix = site['network_prefix']
-        vlans = site['hardware']['network'].get('vlans', [])
-
-        for vlan in vlans:
-            subnet = vlan.get('subnet', '')
-            if subnet and not subnet.startswith(network_prefix):
-                print(f'✗ VLAN {vlan.get(\"id\")} subnet {subnet} doesn\\'t match network prefix {network_prefix}')
-                sys.exit(1)
-
-    print('✓ Site structure is valid')
-
-except Exception as e:
-    print(f'✗ Validation error: {e}')
-    sys.exit(1)
-"
-
-    if [[ $? -eq 0 ]]; then
-        log_success "Structure validation passed for $site_name"
-        return 0
-    else
-        log_error "Structure validation failed for $site_name"
-        return 1
-    fi
-}
-
-validate_credentials() {
-    local file="$1"
-    local site_name="$(basename "$file" .yml)"
-
-    log_info "Checking credentials configuration for $site_name..."
-
-    # Extract credential environment variables
-    local cred_vars=()
-    if python3 -c "
-import yaml
-with open('$file', 'r') as f:
-    config = yaml.safe_load(f)
-
-site = config.get('site', {})
-credentials = site.get('credentials', {})
-
-for key, value in credentials.items():
-    if key.endswith('_secret') or key.endswith('_key'):
-        if isinstance(value, str) and value.isupper():
-            print(value)
-" 2>/dev/null; then
-        while IFS= read -r var; do
-            if [[ -n "$var" ]]; then
-                cred_vars+=("$var")
-            fi
-        done < <(python3 -c "
-import yaml
-with open('$file', 'r') as f:
-    config = yaml.safe_load(f)
-
-site = config.get('site', {})
-credentials = site.get('credentials', {})
-
-for key, value in credentials.items():
-    if key.endswith('_secret') or key.endswith('_key'):
-        if isinstance(value, str) and value.isupper():
-            print(value)
-")
-    fi
-
-    # Check if .env file exists and contains the variables
-    if [[ -f ".env" ]]; then
-        local missing_vars=()
-        for var in "${cred_vars[@]}"; do
-            if ! grep -q "^${var}=" .env; then
-                missing_vars+=("$var")
-            fi
-        done
-
-        if [[ ${#missing_vars[@]} -eq 0 ]]; then
-            log_success "All required credentials found in .env for $site_name"
-        else
-            log_warning "Missing credentials in .env for $site_name: ${missing_vars[*]}"
-        fi
-    else
-        log_warning "No .env file found - credentials will need to be set"
-    fi
-}
-
-validate_deployment_readiness() {
-    log_info "Checking deployment readiness..."
-
-    local issues=0
-
-    # Check for required tools
-    local required_tools=("ansible-playbook" "terraform" "docker")
-    for tool in "${required_tools[@]}"; do
-        if ! command -v "$tool" >/dev/null 2>&1; then
-            log_warning "Missing deployment tool: $tool"
-            ((issues++))
+    for field in "${required_fields[@]}"; do
+        if ! get_config_value "$field" "$config_file" >/dev/null 2>&1; then
+            log_error "Missing required configuration field: $field"
+            return 1
         fi
     done
 
-    # Check deployment scripts
-    if [[ ! -f "deployment/scripts/create_site_config.sh" ]]; then
-        log_warning "Site creation script not found"
-        ((issues++))
-    fi
-
-    # Check Ansible playbooks
-    if [[ -d "deployment/ansible/playbooks" ]]; then
-        local playbook_errors=0
-        while IFS= read -r -d '' playbook; do
-            if command -v ansible-playbook >/dev/null 2>&1; then
-                if ! ansible-playbook --syntax-check "$playbook" >/dev/null 2>&1; then
-                    log_error "Ansible syntax error in: $playbook"
-                    ((playbook_errors++))
-                fi
-            fi
-        done < <(find deployment/ansible/playbooks -name "*.yml" -print0 2>/dev/null || true)
-
-        # Also check deployment master playbook
-        if [[ -f "deployment/ansible/master_playbook.yml" ]] && command -v ansible-playbook >/dev/null 2>&1; then
-            if ! ansible-playbook --syntax-check "deployment/ansible/master_playbook.yml" >/dev/null 2>&1; then
-                log_error "Ansible syntax error in: deployment/ansible/master_playbook.yml"
-                ((playbook_errors++))
-            fi
-        fi
-
-        if [[ $playbook_errors -eq 0 ]]; then
-            log_success "Deployment Ansible playbooks have valid syntax"
-        else
-            log_error "Found $playbook_errors Ansible syntax errors in deployment"
-            ((issues++))
-        fi
-    fi
-
-    # Check proxmox-local production playbooks
-    if [[ -d "proxmox-local/ansible/playbooks" ]]; then
-        local production_errors=0
-
-        # Check the production master playbook
-        if [[ -f "proxmox-local/ansible/site.yml" ]] && command -v ansible-playbook >/dev/null 2>&1; then
-            # Check syntax but ignore missing collections (expected in CI)
-            if ! ansible-playbook --syntax-check "proxmox-local/ansible/site.yml" >/dev/null 2>&1; then
-                # Try to determine if it's a missing collection vs real syntax error
-                local syntax_output
-                syntax_output=$(ansible-playbook --syntax-check "proxmox-local/ansible/site.yml" 2>&1 || true)
-                if [[ "$syntax_output" == *"missing collection"* ]] || [[ "$syntax_output" == *"ansibleguy.opnsense"* ]]; then
-                    log_warning "Production playbook needs OPNsense collection (install with: ansible-galaxy collection install ansibleguy.opnsense)"
-                else
-                    log_error "Ansible syntax error in: proxmox-local/ansible/site.yml"
-                    ((production_errors++))
-                fi
-            fi
-        fi
-
-        if [[ $production_errors -eq 0 ]]; then
-            log_success "Production Ansible playbooks have valid syntax"
-        else
-            log_error "Found $production_errors Ansible syntax errors in production"
-            ((issues++))
-        fi
-    fi
-
-    if [[ $issues -eq 0 ]]; then
-        log_success "Deployment readiness check passed"
-        return 0
-    else
-        log_warning "Found $issues deployment readiness issues"
-        return 1
-    fi
+    log_info "✅ Site configuration validation passed"
+    return 0
 }
 
-validate_site() {
-    local site_file="$1"
-    local site_name="$(basename "$site_file" .yml)"
+validate_environment() {
+    log_info "Validating development environment..."
 
-    echo -e "\n${BLUE}=== Validating Site: $site_name ===${NC}"
+    # Check for required tools
+    local required_tools=("bash" "grep" "sed" "awk")
 
-    local errors=0
+    for tool in "${required_tools[@]}"; do
+        if ! command -v "$tool" >/dev/null 2>&1; then
+            log_error "Required tool not found: $tool"
+            return 1
+        fi
+    done
 
-    # YAML syntax
-    if ! validate_yaml_syntax "$site_file"; then
-        ((errors++))
-    else
-        log_success "YAML syntax is valid"
-    fi
+    # Check for required directories
+    local required_dirs=("scripts" "config" "vendor")
 
-    # Site structure
-    if ! validate_site_structure "$site_file"; then
-        ((errors++))
-    fi
+    for dir in "${required_dirs[@]}"; do
+        if [[ ! -d "$SCRIPT_DIR/$dir" ]]; then
+            log_error "Required directory not found: $dir"
+            return 1
+        fi
+    done
 
-    # Credentials
-    validate_credentials "$site_file"
-
-    if [[ $errors -eq 0 ]]; then
-        log_success "Site $site_name validation passed"
-        return 0
-    else
-        log_error "Site $site_name validation failed with $errors errors"
-        return 1
-    fi
+    log_info "✅ Environment validation passed"
+    return 0
 }
 
+validate_core_modules() {
+    log_info "Validating core modules..."
+
+    # Check that core module files exist and are executable
+    local core_files=("scripts/core/init.sh" "scripts/core/config.sh" "scripts/core/logging.sh")
+
+    for file in "${core_files[@]}"; do
+        if [[ ! -f "$SCRIPT_DIR/$file" ]]; then
+            log_error "Core module file not found: $file"
+            return 1
+        fi
+
+        if [[ ! -x "$SCRIPT_DIR/$file" ]]; then
+            log_warn "Core module file not executable: $file"
+            # Try to make it executable
+            if chmod +x "$SCRIPT_DIR/$file"; then
+                log_info "Made $file executable"
+            else
+                log_error "Failed to make $file executable: $file"
+                return 1
+            fi
+        fi
+    done
+
+    log_info "✅ Core modules validation passed"
+    return 0
+}
+
+# Main validation function
 main() {
-    local site_name="${1:-}"
-    local total_errors=0
+    local config_file=""
+    local validate_env=true
+    local validate_core=true
 
-    echo -e "${BLUE}"
-    echo "╔══════════════════════════════════════════════════════════════╗"
-    echo "║              Configuration Validation                       ║"
-    echo "║                Proxmox Firewall                             ║"
-    echo "╚══════════════════════════════════════════════════════════════╝"
-    echo -e "${NC}"
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --config|-c)
+                config_file="$2"
+                shift 2
+                ;;
+            --no-env)
+                validate_env=false
+                shift
+                ;;
+            --no-core)
+                validate_core=false
+                shift
+                ;;
+            --help|-h)
+                echo "Usage: $0 [OPTIONS]"
+                echo ""
+                echo "Validate configuration and environment for BrewNix submodule"
+                echo ""
+                echo "Options:"
+                echo "  -c, --config FILE    Validate specific site configuration file"
+                echo "  --no-env            Skip environment validation"
+                echo "  --no-core           Skip core modules validation"
+                echo "  -h, --help          Show this help message"
+                exit 0
+                ;;
+            *)
+                log_error "Unknown option: $1"
+                exit 1
+                ;;
+        esac
+    done
 
-    cd "$SCRIPT_DIR"
+    local validation_passed=true
 
-    # Check Python availability
-    if ! command -v python3 >/dev/null 2>&1; then
-        log_error "Python3 is required for validation"
-        exit 1
-    fi
-
-    # Install required Python packages if needed
-    if ! python3 -c "import yaml" 2>/dev/null; then
-        log_info "Installing required Python packages..."
-        pip3 install pyyaml >/dev/null 2>&1 || {
-            log_error "Failed to install PyYAML. Please install manually: pip3 install pyyaml"
-            exit 1
-        }
-    fi
-
-    if [[ -n "$site_name" ]]; then
-        # Validate specific site
-        local site_file="${PROXMOX_FW_CONFIG_ROOT}/sites/${site_name}.yml"
-        if [[ ! -f "$site_file" ]]; then
-            log_error "Site configuration not found: $site_file"
-            exit 1
-        fi
-
-        if ! validate_site "$site_file"; then
-            ((total_errors++))
-        fi
-    else
-        # Validate all sites
-        if [[ -d "${PROXMOX_FW_CONFIG_ROOT}/sites" ]]; then
-            local site_count=0
-            while IFS= read -r -d '' site_file; do
-                if ! validate_site "$site_file"; then
-                    ((total_errors++))
-                fi
-                ((site_count++))
-            done < <(find "${PROXMOX_FW_CONFIG_ROOT}/sites" -name "*.yml" -print0 2>/dev/null || true)
-
-            if [[ $site_count -eq 0 ]]; then
-                log_warning "No site configurations found in ${PROXMOX_FW_CONFIG_ROOT}/sites/"
-            fi
-        else
-            log_warning "No ${PROXMOX_FW_CONFIG_ROOT}/sites directory found"
-        fi
-
-        # Validate example site in test framework
-        if [[ -f "docker-test-framework/example-site.yml" ]]; then
-            echo -e "\n${BLUE}=== Validating Example Site ===${NC}"
-            if ! validate_site "${PROXMOX_FW_CONFIG_ROOT}/sites/example-site.yml"; then
-                ((total_errors++))
-            fi
-        fi
-
-        # Validate site template
-        if [[ -f "${PROXMOX_FW_CONFIG_ROOT}/site_template.yml" ]]; then
-            echo -e "\n${BLUE}=== Validating Site Template ===${NC}"
-            if ! validate_site "${PROXMOX_FW_CONFIG_ROOT}/site_template.yml"; then
-                ((total_errors++))
-            fi
+    # Run validations
+    if [[ "$validate_env" == true ]]; then
+        if ! validate_environment; then
+            validation_passed=false
         fi
     fi
 
-    # Check deployment readiness
-    echo -e "\n${BLUE}=== Deployment Readiness ===${NC}"
-    if ! validate_deployment_readiness; then
-        log_warning "Some deployment tools may not be available"
+    if [[ "$validate_core" == true ]]; then
+        if ! validate_core_modules; then
+            validation_passed=false
+        fi
+    fi
+
+    if [[ -n "$config_file" ]]; then
+        if ! validate_site_config "$config_file"; then
+            validation_passed=false
+        fi
     fi
 
     # Summary
-    echo -e "\n${BLUE}=== Validation Summary ===${NC}"
-    if [[ $total_errors -eq 0 ]]; then
-        log_success "All validations passed! ✓"
-        echo -e "\n${GREEN}Your configuration is ready for deployment.${NC}"
-        echo -e "\n${BLUE}Deployment Options:${NC}"
-        echo -e "  CI/Testing: ${BLUE}ansible-playbook deployment/ansible/master_playbook.yml --limit=SITE_NAME${NC}"
-        echo -e "  Production: ${BLUE}cd proxmox-local/ansible && ansible-playbook site.yml --limit=SITE_NAME${NC}"
+    if [[ "$validation_passed" == true ]]; then
+        log_info "🎉 All validations passed!"
+        return 0
     else
-        log_error "Found $total_errors validation errors"
-        echo -e "\n${RED}Please fix the errors before deployment.${NC}"
-        exit 1
+        log_error "❌ Some validations failed!"
+        return 1
     fi
 }
 
-# Handle help
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-    usage
-    exit 0
+# Run validation if script is executed directly
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
 fi
-
-main "$@"
