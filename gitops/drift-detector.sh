@@ -267,7 +267,7 @@ auto_sync() {
     log_info "Performing automatic sync from GitOps repository..."
     
     # Use the GitOps deployment script to sync
-    if "$SCRIPT_DIR/deploy-gitops.sh" --operation sync "$SITE_CONFIG"; then
+    if "$SCRIPT_DIR/../../../../../brewnix.sh" gitops sync; then
         log_success "Automatic sync completed successfully"
         
         # Update state with successful sync

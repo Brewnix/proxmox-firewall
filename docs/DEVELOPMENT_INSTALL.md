@@ -85,8 +85,7 @@ ansible-playbook deployment/ansible/master_playbook.yml --limit=<site_name>
 
 **For Production Deployment:**
 ```bash
-cd proxmox-local/ansible
-ansible-playbook site.yml --limit=<site_name>
+../../brewnix.sh deployment site proxmox-firewall config/sites/<site_name>/firewall-site.yml
 ```
 
 ---

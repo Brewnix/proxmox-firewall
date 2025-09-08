@@ -16,7 +16,7 @@ Welcome to the Proxmox Firewall project documentation! This directory contains c
 
 ### 🚀 Deployment
 - **[Deployment Guide](../deployment/README.md)** - Automated deployment with Ansible
-- **[Site Configuration](../proxmox-local/ansible/SITE_CONFIG.md)** - Site-specific configuration management
+- **[Site Configuration](../deployment/ansible/SITE_CONFIG.md)** - Site-specific configuration management
 - **[Manual Installation](deployment/MANUAL_INSTALLATION.md)** - Step-by-step manual setup
 
 ### ⚙️ Configuration

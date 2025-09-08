@@ -277,9 +277,9 @@ proxmox-firewall/
 │   ├── ansible/          # Testing playbooks
 │   ├── scripts/          # Helper scripts
 │   └── terraform/        # Testing infrastructure
-├── proxmox-local/         # Production deployment
-│   ├── ansible/          # Production playbooks
-│   └── scripts/          # Production helper scripts
+├── brewnix/              # Production deployment (modular architecture)
+│   ├── scripts/          # Production helper scripts
+│   └── ansible/          # Production playbooks
 ├── common/               # Shared components
 │   ├── ansible/          # Common playbooks/roles
 │   └── terraform/        # Reusable infrastructure modules

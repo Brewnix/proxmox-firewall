@@ -183,10 +183,10 @@ export PROXMOX_API_SECRET="$(cat ~/.config/proxmox/api_token)"
 **Unsecured Communication:**
 ```bash
 # ❌ Bad: Unencrypted connections
-ansible-playbook -i inventory/hosts.yml site.yml
+../../brewnix.sh deployment site proxmox-firewall config/sites/<site_name>/firewall-site.yml
 
 # ✅ Good: Secured connections with proper SSH keys
-ansible-playbook -i inventory/hosts.yml site.yml \
+../../brewnix.sh deployment site proxmox-firewall config/sites/<site_name>/firewall-site.yml \
   --private-key ~/.ssh/proxmox-firewall \
   --ssh-extra-args="-o StrictHostKeyChecking=yes"
 ```

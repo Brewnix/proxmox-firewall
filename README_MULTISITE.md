@@ -105,9 +105,9 @@ site:
      ansible-playbook vendor/proxmox-firewall/deployment/ansible/master_playbook.yml --limit=<site_name>
      ```
    - For production:
+
      ```bash
-     cd vendor/proxmox-firewall/proxmox-local/ansible
-     ansible-playbook site.yml --limit=<site_name>
+     ../../brewnix.sh deployment site proxmox-firewall config/sites/<site_name>/firewall-site.yml
      ```
 
 ---

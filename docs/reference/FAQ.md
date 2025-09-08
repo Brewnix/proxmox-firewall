@@ -213,13 +213,11 @@ Minimal ongoing costs:
 ### How do I update the system?
 
 **Security updates**: Automatic by default
-**System updates**: 
+**System updates**:
 ```bash
 # Update Proxmox and VMs
-ansible-playbook proxmox-local/ansible/site.yml --tags update
-```
-
-**Project updates**:
+../../brewnix.sh deployment site proxmox-firewall config/sites/<site_name>/firewall-site.yml --tags update
+```**Project updates**:
 ```bash
 git pull origin main
 ./validate-config.sh

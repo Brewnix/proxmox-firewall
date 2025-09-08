@@ -31,10 +31,9 @@
 
 ```bash
 # Deploy with GitOps repository
-./vendor/proxmox-firewall/gitops/deploy-gitops.sh \
-  --operation deploy \
-  --gitops-repo https://github.com/yourorg/firewall-config.git \
-  config/sites/your-site/firewall-site.yml
+../../brewnix.sh gitops sync \
+  --repo https://github.com/yourorg/firewall-config.git \
+  --config config/sites/your-site/firewall-site.yml
 
 # Enable continuous drift detection
 sudo systemctl enable brewnix-drift-detection.timer
@@ -45,10 +44,9 @@ sudo systemctl start brewnix-drift-detection.timer
 
 ```bash
 # Create USB bootstrap image
-./vendor/proxmox-firewall/gitops/deploy-gitops.sh \
-  --operation usb-create \
-  --usb-device /dev/sdb \
-  config/sites/your-site/firewall-site.yml
+../../brewnix.sh utilities usb-create \
+  --device /dev/sdb \
+  --config config/sites/your-site/firewall-site.yml
 
 # Insert USB into Proxmox server and run:
 # /media/usb/bootstrap.sh
@@ -58,7 +56,7 @@ sudo systemctl start brewnix-drift-detection.timer
 
 ```bash
 # Use the vendor deployment system
-../../scripts/deploy-vendor.sh proxmox-firewall config/sites/your-site/firewall-site.yml
+../../brewnix.sh deployment site proxmox-firewall config/sites/your-site/firewall-site.yml
 ```
 
 ### 4. Configure Your Project
@@ -88,8 +86,7 @@ sudo systemctl start brewnix-drift-detection.timer
   **Production Environment:**
   
   ```bash
-  cd vendor/proxmox-firewall/proxmox-local/ansible
-  ansible-playbook site.yml --limit=<site_name>
+  ../../brewnix.sh deployment site proxmox-firewall config/sites/<site_name>/firewall-site.yml
   ```
 
 ---
@@ -225,11 +222,10 @@ ansible-playbook vendor/proxmox-firewall/deployment/ansible/master_playbook.yml 
 
 ```bash
 # Complete production deployment with OPNsense configuration
-cd vendor/proxmox-firewall/proxmox-local/ansible
-ansible-playbook site.yml --limit=<site_name>
+../../brewnix.sh deployment site proxmox-firewall config/sites/<site_name>/firewall-site.yml
 
 # Or for maintenance (can be run locally on Proxmox server)
-ansible-playbook site.yml --tags maintenance
+../../brewnix.sh deployment site proxmox-firewall config/sites/<site_name>/firewall-site.yml --tags maintenance
 ```
 
 The production deployment process:
@@ -436,7 +432,7 @@ A comprehensive [Proxmox](https://pve.proxmox.com/wiki/Installation)-based firew
 | **[📚 Complete Documentation](docs/README.md)** | Full documentation index and guides |
 | **[🚀 Quick Start Guide](#-quick-start)** | Get up and running in minutes |
 | **[🔧 Deployment Guide](deployment/README.md)** | Complete deployment automation |
-| **[⚙️ Site Configuration](proxmox-local/ansible/SITE_CONFIG.md)** | Site-specific configuration management |
+| **[⚙️ Site Configuration](deployment/ansible/SITE_CONFIG.md)** | Site-specific configuration management |
 | **[🌐 Multi-site Setup](README_MULTISITE.md)** | Managing multiple locations |
 | **[🏠 Device Management](README_DEVICES.md)** | Network device configuration |
 | **[📡 Network Configuration](config/NETWORK_PREFIX_FORMAT.md)** | VLAN and network design |
@@ -539,8 +535,7 @@ ansible-playbook deployment/ansible/master_playbook.yml --limit=<site_name>
 **Production Environment:**
 
 ```bash
-cd proxmox-local/ansible
-ansible-playbook site.yml --limit=<site_name>
+../../brewnix.sh deployment site proxmox-firewall config/sites/<site_name>/firewall-site.yml
 ```
 
 ## 🧩 Using as a Submodule (Recommended for Integrators)
@@ -696,13 +691,13 @@ cp backup/proxmox-local-legacy/config/site.yml config/sites/your-site/firewall-s
 #### 3. Deploy with GitOps
 ```bash
 # Modern deployment with drift detection
-./vendor/proxmox-firewall/gitops/deploy-gitops.sh \
-  --operation deploy \
-  --gitops-repo https://github.com/yourorg/firewall-config.git \
-  config/sites/your-site/firewall-site.yml
+../../brewnix.sh gitops sync \
+  --repo https://github.com/yourorg/firewall-config.git \
+  --config config/sites/your-site/firewall-site.yml
 ```
 
 #### 4. Enable Continuous Monitoring
+
 ```bash
 # Start drift detection service
 sudo systemctl enable brewnix-drift-detection.timer
@@ -715,35 +710,45 @@ systemctl status brewnix-drift-detection.timer
 ### New GitOps Features
 
 #### Drift Detection
+
 - **Continuous Monitoring**: Checks every 5 minutes for configuration changes
 - **GitOps Sync**: Automatically detects and applies repository updates
 - **System Validation**: Monitors VM state, firewall rules, and service health
 - **Alert Integration**: Slack/webhook notifications for drift events
 
 #### USB Bootstrap
+
 - **Zero-Touch Deployment**: Create bootable USB with embedded configuration
 - **Automated Setup**: Complete infrastructure deployment from USB device
 - **SSH Key Injection**: Automatic SSH access configuration
 - **Network Bootstrap**: Automatic network configuration and Git cloning
 
 #### GitOps Operations
+
 ```bash
 # Check for configuration drift
-./gitops/deploy-gitops.sh --operation drift-check site-config.yml
+../../brewnix.sh gitops drift-check config/sites/your-site/firewall-site.yml
 
-# Sync from GitOps repository  
-./gitops/deploy-gitops.sh --operation sync site-config.yml
+# Sync from GitOps repository
+../../brewnix.sh gitops sync \
+  --repo https://github.com/yourorg/firewall-config.git \
+  --config config/sites/your-site/firewall-site.yml
 
 # Create USB bootstrap image
-./gitops/deploy-gitops.sh --operation usb-create --usb-device /dev/sdb site-config.yml
+../../brewnix.sh utilities usb-create \
+  --device /dev/sdb \
+  --config config/sites/your-site/firewall-site.yml
 
 # Backup current configuration
-./gitops/deploy-gitops.sh --operation backup site-config.yml
+../../brewnix.sh backup create \
+  --type firewall-config \
+  --destination /opt/backups/firewall-config-$(date +%Y%m%d).tar.gz
 ```
 
 ### Configuration Management
 
 #### Environment Variables
+
 ```bash
 # Required for GitOps deployment
 export TAILSCALE_AUTH_KEY="your-tailscale-key"
@@ -757,6 +762,7 @@ export BACKUP_S3_BUCKET="firewall-backups"
 ```
 
 #### Drift Detection Configuration
+
 ```bash
 # Configure drift detection intervals
 export DRIFT_CHECK_INTERVAL=300  # 5 minutes
@@ -774,8 +780,7 @@ The legacy `proxmox-local` approach is still supported but deprecated:
 
 ```bash
 # Legacy deployment (deprecated)
-cd vendor/proxmox-firewall/proxmox-local-legacy/ansible
-ansible-playbook -i inventory/hosts.yml site.yml
+../../brewnix.sh deployment site proxmox-firewall config/sites/<site_name>/firewall-site.yml --legacy
 ```
 
 ### Benefits of GitOps Approach
@@ -791,21 +796,26 @@ ansible-playbook -i inventory/hosts.yml site.yml
 ### Troubleshooting
 
 #### Drift Detection Issues
+
 ```bash
 # Check drift detection service
 journalctl -u brewnix-drift-detection -f
 
 # Manual drift check
-./gitops/drift-detector.sh --check-once --site-config site.yml
+../../brewnix.sh gitops drift-check config/sites/your-site/firewall-site.yml
 
 # View drift state
 cat /var/lib/brewnix/drift-state.json
 ```
 
 #### GitOps Sync Problems
+
 ```bash
 # Manual GitOps sync
-./gitops/deploy-gitops.sh --operation sync --verbose site.yml
+../../brewnix.sh gitops sync \
+  --repo https://github.com/yourorg/firewall-config.git \
+  --config config/sites/your-site/firewall-site.yml \
+  --verbose
 
 # Check GitOps repository status
 git -C /tmp/gitops-repo status
@@ -813,4 +823,4 @@ git -C /tmp/gitops-repo status
 
 ---
 
-**Proxmox Firewall with GitOps: Enterprise-grade security infrastructure with modern automation! 🔥**
+## Proxmox Firewall with GitOps: Enterprise-grade security infrastructure with modern automation! 🔥

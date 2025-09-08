@@ -16,8 +16,7 @@ This directory contains the scripts and configurations that will be deployed to 
 Run the master playbook remotely from your deployment console:
 
 ```bash
-cd proxmox-local/ansible
-ansible-playbook -i inventory/hosts.yml site.yml --limit <site_name>
+../../brewnix.sh deployment site proxmox-firewall config/sites/<site_name>/firewall-site.yml
 ```
 
 This will:
