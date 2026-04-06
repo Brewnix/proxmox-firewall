@@ -1,1 +1,8 @@
 proxmox_nag_remove: true
+
+# Physical port names on your N305 (adjust if your NIC names differ)
+fiber_port: "nic0"          # or enpXs0 etc. - check with `ip link`
+starlink_port: "nic1"
+lan_switch_port: "nic2"
+omada_ap_port: "nic3"       # or the actual SFP name (often enpXs0f0 or similar)
+camera_switch_port: "nic4"

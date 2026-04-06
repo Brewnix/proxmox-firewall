@@ -1,0 +1,54 @@
+# ANSIBLE MANAGED - Brewnix N305 Firewall Networking
+# One bridge per physical port. DHCP on vmbr2 for Ansible during build.
+
+auto lo
+iface lo inet loopback
+
+# 1. WAN Fiber (nic0)
+auto vmbr0
+iface vmbr0 inet manual
+    bridge-ports {{ fiber_port }}
+    bridge-stp off
+    bridge-fd 0
+    bridge-vlan-aware no
+
+# 2. WAN Starlink (nic1)
+auto vmbr1
+iface vmbr1 inet manual
+    bridge-ports {{ starlink_port }}
+    bridge-stp off
+    bridge-fd 0
+    bridge-vlan-aware no
+
+# 3. Cottage Lan Switch (nic2) - Simple bridge with DHCP (current Ansible path)
+auto vmbr2
+iface vmbr2 inet dhcp
+    bridge-ports {{ lan_switch_port }}
+    bridge-stp off
+    bridge-fd 0
+    bridge-vlan-aware no
+
+# 4. Camera Switch (nic4)
+auto vmbr3
+iface vmbr3 inet manual
+    bridge-ports {{ camera_switch_port }}
+    bridge-stp off
+    bridge-fd 0
+    bridge-vlan-aware yes
+    bridge-vids 20 50
+
+# 5. Full Trunk to Omada AP (nic3)
+auto vmbr4
+iface vmbr4 inet manual
+    bridge-ports {{ omada_ap_port }}
+    bridge-stp off
+    bridge-fd 0
+    bridge-vlan-aware yes
+    bridge-vids 10 20 30 40 50
+
+# Proxmox Host Management on VLAN 50 via Omada trunk
+auto vmbr4.50
+iface vmbr4.50 inet static
+    address 192.168.5.1/24
+    # gateway will be updated to OPNsense later
+    bridge-vids 50

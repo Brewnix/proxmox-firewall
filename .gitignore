@@ -56,6 +56,7 @@ proxmox-ve-custom.iso
 *.tfstate
 *.tfstate.*
 terraform.tfstate*
+.terraform.lock.hcl
 
 # Crash log files
 crash.log

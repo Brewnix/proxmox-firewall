@@ -1,0 +1,30 @@
+#cloud-config
+hostname: pihole
+fqdn: pihole.brewnix.lan
+
+users:
+  - name: ansible
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - git
+
+runcmd:
+  - curl -sSL https://install.pi-hole.net | bash -s -- --unattended
+  - echo "WEBPASSWORD=brewnix123" >> /etc/pihole/setupVars.conf   # Change this!
+  - pihole -a -p brewnix123                                      # Change this password
+  - systemctl enable pihole-FTL
+  - systemctl start pihole-FTL
+
+write_files:
+  - path: /etc/dnsmasq.d/99-local.conf
+    content: |
+      # Optional: forward local .lan queries to your future OPNsense
+      server=/lan/192.168.5.1

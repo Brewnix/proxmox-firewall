@@ -1,0 +1,26 @@
+#cloud-config
+hostname: opnsense
+fqdn: opnsense.brewnix.lan
+
+users:
+  - name: ansible
+    gecos: Ansible User
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/sh
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+packages:
+  - curl
+  - ca-certificates
+
+runcmd:
+  - echo "OPNsense initial bootstrap complete"
+  - echo "Please complete initial setup via web UI at https://192.168.0.200 (or DHCP assigned IP)"
+  - echo "Then configure WANs on vmbr0/vmbr1 and LAN on the other interfaces"
+
+write_files:
+  - path: /etc/rc.conf.local
+    content: |
+      # Disable IPv6 if you don't need it yet
+      ipv6_activate_all_interfaces="NO"

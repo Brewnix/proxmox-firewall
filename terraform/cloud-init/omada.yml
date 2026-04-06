@@ -1,0 +1,32 @@
+#cloud-config
+hostname: omada
+fqdn: omada.brewnix.lan
+
+users:
+  - name: ansible
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - gnupg
+  - apt-transport-https
+
+runcmd:
+  - curl -fsSL https://repo.tp-link.com/debian/public.gpg | gpg --dearmor -o /usr/share/keyrings/tplink.gpg
+  - echo "deb [signed-by=/usr/share/keyrings/tplink.gpg] https://repo.tp-link.com/debian stable main" > /etc/apt/sources.list.d/tplink.list
+  - apt update
+  - apt install -y omada-controller
+  - systemctl enable omada
+  - systemctl start omada
+
+write_files:
+  - path: /etc/systemd/system/omada.service.d/override.conf
+    content: |
+      [Service]
+      LimitNOFILE=8192

@@ -1,0 +1,28 @@
+#cloud-config
+hostname: tailscale
+fqdn: tailscale.brewnix.lan
+
+users:
+  - name: ansible
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+
+runcmd:
+  - curl -fsSL https://tailscale.com/install.sh | sh
+  - tailscale up --authkey=${tailscale_auth_key} --advertise-routes=192.168.0.0/16,192.168.5.0/24 --accept-routes
+  - echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
+  - sysctl -p
+
+write_files:
+  - path: /etc/systemd/system/tailscale.service.d/override.conf
+    content: |
+      [Service]
+      Environment=TS_EXTRA_ARGS=--advertise-routes=192.168.0.0/16,192.168.5.0/24

@@ -67,6 +67,22 @@
         name: pveproxy
         state: restarted
 
+    # === Network Bridges - VLAN-aware setup matching network_devices.yaml ===
+    - name: Configure VLAN-aware bridges for full network (fiber, Starlink, Omada, Camera, LAN)
+      ansible.builtin.template:
+        src: templates/network-interfaces.j2
+        dest: /etc/network/interfaces
+        owner: root
+        group: root
+        mode: '0644'
+        backup: true
+      notify: restart networking
+
+    - name: Apply network configuration (ifreload)
+      ansible.builtin.command: ifreload -a
+      changed_when: false
+      when: ansible_facts.packages['ifupdown2'] is defined  # safe on Proxmox
+
     # === Hardening ===
     - name: Install hardening packages
       ansible.builtin.apt:
@@ -179,6 +195,69 @@
         from: "192.168.0.0/23"
         proto: tcp
 
+    # === Create Golden Debian 12 Cloud-Init Template ===
+    - name: Ensure cloud-init image directory exists
+      ansible.builtin.file:
+        path: /var/lib/vz/template/iso
+        state: directory
+        mode: '0755'
+
+    - name: Download latest Debian 12 generic cloud image
+      ansible.builtin.get_url:
+        url: https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.qcow2
+        dest: /var/lib/vz/template/iso/debian-12-genericcloud-amd64.qcow2
+        mode: '0644'
+        force: false   # only download if missing
+
+    - name: Install libguestfs-tools for virt-customize
+      ansible.builtin.apt:
+        name: libguestfs-tools
+        state: present
+
+    - name: Install qemu-guest-agent inside the cloud image
+      ansible.builtin.command: >
+        virt-customize -a /var/lib/vz/template/iso/debian-12-genericcloud-amd64.qcow2
+        --install qemu-guest-agent
+      args:
+        creates: /var/lib/vz/template/iso/debian-12-genericcloud-amd64.qcow2.bak   # idempotent
+
+    - name: Create base VM for template (ID 9000)
+      community.general.proxmox_kvm:
+        vmid: 9000
+        name: debian12-cloudinit-template
+        memory: 2048
+        cores: 2
+        net0: virtio,bridge=vmbr2
+        ostype: l26
+        machine: q35
+        scsihw: virtio-scsi-pci
+        state: present
+        node: "{{ inventory_hostname }}"
+
+    - name: Import cloud image disk to the template VM
+      ansible.builtin.command: >
+        qm importdisk 9000 /var/lib/vz/template/iso/debian-12-genericcloud-amd64.qcow2 local-lvm --format qcow2
+      args:
+        creates: /var/lib/vz/images/9000/vm-9000-disk-0.qcow2
+
+    - name: Configure the template VM disk and Cloud-Init
+      ansible.builtin.command: >
+        qm set 9000 
+        --scsi0 local-lvm:vm-9000-disk-0,discard=on,ssd=1 
+        --ide2 local-lvm:cloudinit 
+        --boot c --bootdisk scsi0 
+        --serial0 socket --vga serial0 
+        --agent enabled=1 
+        --ciuser ansible 
+        --sshkeys /home/ansible/.ssh/authorized_keys
+      args:
+        creates: /var/lib/vz/images/9000/vm-9000-disk-0.qcow2   # rough idempotency
+
+    - name: Convert VM to template
+      ansible.builtin.command: qm template 9000
+      args:
+        creates: /etc/pve/nodes/{{ inventory_hostname }}/qemu-server/9000.conf.template   # approximate
+
   handlers:
     - name: restart ssh
       ansible.builtin.systemd:
@@ -189,3 +268,7 @@
       ansible.builtin.systemd:
         name: fail2ban
         state: restarted
+
+    - name: restart networking
+      ansible.builtin.command: ifreload -a
+      changed_when: false
