@@ -1,0 +1,191 @@
+---
+- name: Configure Proxmox VE host - clean community repos + hardening
+  hosts: proxmox
+  become: true
+  gather_facts: true
+
+  tasks:
+
+    # === Repo Cleanup ===
+    - name: Set correct Python interpreter (quiet warning on Proxmox 9)
+      ansible.builtin.set_fact:
+        ansible_python_interpreter: /usr/bin/python3
+
+    - name: Ensure clean Proxmox no-subscription repo
+      ansible.builtin.copy:
+        dest: /etc/apt/sources.list.d/proxmox.sources
+        content: |
+          Types: deb
+          URIs: http://download.proxmox.com/debian/pve
+          Suites: trixie
+          Components: pve-no-subscription
+          Architectures: amd64
+          Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
+        mode: '0644'
+
+    - name: Ensure Ceph no-subscription repo (if ceph.sources exists)
+      ansible.builtin.copy:
+        dest: /etc/apt/sources.list.d/ceph.sources
+        content: |
+          Types: deb
+          URIs: http://download.proxmox.com/debian/ceph-squid
+          Suites: trixie
+          Components: no-subscription
+          Architectures: amd64
+          Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
+        mode: '0644'
+      when: lookup('fileglob', '/etc/apt/sources.list.d/ceph.sources', errors='ignore') | length > 0
+
+    - name: Remove any old enterprise PVE sources file
+      ansible.builtin.file:
+        path: /etc/apt/sources.list.d/pve-enterprise.sources
+        state: absent
+
+    - name: Update apt cache after repo cleanup
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    # === Nag Removal (persistent) ===
+    - name: Remove subscription nag from JS
+      ansible.builtin.replace:
+        path: /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js
+        regexp: 'if \(data\.status !== "Active"\)'
+        replace: 'if (false)'
+
+    - name: Make nag removal persistent
+      ansible.builtin.copy:
+        dest: /etc/apt/apt.conf.d/99proxmox-nag-removal
+        content: |
+          DPkg::Post-Invoke-Success {
+            "sed -i 's/if (data\\.status !== \"Active\")/if (false)/g' /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js && systemctl restart pveproxy || true";
+          };
+        mode: '0644'
+
+    - name: Restart pveproxy
+      ansible.builtin.systemd:
+        name: pveproxy
+        state: restarted
+
+    # === Hardening ===
+    - name: Install hardening packages
+      ansible.builtin.apt:
+        name:
+          - unattended-upgrades
+          - fail2ban
+          - ufw
+        state: present
+
+    - name: Configure unattended-upgrades (security + updates)
+      ansible.builtin.copy:
+        dest: /etc/apt/apt.conf.d/50unattended-upgrades
+        content: |
+          Unattended-Upgrade::Allowed-Origins {
+            "${distro_id}:${distro_codename}-security";
+            "${distro_id}:${distro_codename}-updates";
+          };
+          Unattended-Upgrade::Package-Blacklist { };
+          Unattended-Upgrade::AutoFixInterruptedDpkg "true";
+          Unattended-Upgrade::MinimalSteps "true";
+          Unattended-Upgrade::InstallOnShutdown "false";
+        mode: '0644'
+
+    - name: Enable unattended-upgrades service
+      ansible.builtin.systemd:
+        name: unattended-upgrades
+        enabled: true
+        state: started
+
+    - name: Harden SSH (key-only, no root, strong ciphers)
+      ansible.builtin.blockinfile:
+        path: /etc/ssh/sshd_config
+        marker: "# ANSIBLE MANAGED BLOCK - SSH Hardening"
+        block: |
+          PermitRootLogin no
+          PasswordAuthentication no
+          PubkeyAuthentication yes
+          PermitEmptyPasswords no
+          MaxAuthTries 3
+          ClientAliveInterval 300
+          ClientAliveCountMax 0
+          UsePAM yes
+          Ciphers aes256-ctr,aes192-ctr,aes128-ctr
+          MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com
+          KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group16-sha512
+        state: present
+      notify: restart ssh
+
+    - name: Configure fail2ban for SSH and Proxmox web UI
+      ansible.builtin.copy:
+        dest: /etc/fail2ban/jail.local
+        content: |
+          [DEFAULT]
+          bantime = 1h
+          findtime = 10m
+          maxretry = 4
+
+          [sshd]
+          enabled = true
+          port = ssh
+          filter = sshd
+          logpath = /var/log/auth.log
+          maxretry = 3
+
+          [proxmox]
+          enabled = true
+          port = 8006
+          filter = proxmox
+          logpath = /var/log/daemon.log
+          maxretry = 4
+        mode: '0644'
+      notify: restart fail2ban
+
+    - name: Create fail2ban filter for Proxmox web UI
+      ansible.builtin.copy:
+        dest: /etc/fail2ban/filter.d/proxmox.conf
+        content: |
+          [Definition]
+          failregex = pvedaemon\[.*\]: authentication failure; .* rhost=<HOST>
+          ignoreregex =
+        mode: '0644'
+      notify: restart fail2ban
+
+    # === UFW Firewall (fixed syntax) ===
+    - name: Set UFW default incoming policy to deny
+      community.general.ufw:
+        direction: incoming
+        default: deny
+
+    - name: Set UFW default outgoing policy to allow
+      community.general.ufw:
+        direction: outgoing
+        default: allow
+
+    - name: Enable UFW firewall
+      community.general.ufw:
+        state: enabled
+
+    - name: Allow SSH from Main Network (VLAN 10)
+      community.general.ufw:
+        rule: allow
+        port: ssh
+        from: "192.168.0.0/23"   # ← Adjust if your management traffic uses a different subnet
+        proto: tcp
+
+    - name: Allow Proxmox Web UI (port 8006) from Main Network only
+      community.general.ufw:
+        rule: allow
+        port: 8006
+        from: "192.168.0.0/23"
+        proto: tcp
+
+  handlers:
+    - name: restart ssh
+      ansible.builtin.systemd:
+        name: ssh
+        state: restarted
+
+    - name: restart fail2ban
+      ansible.builtin.systemd:
+        name: fail2ban
+        state: restarted

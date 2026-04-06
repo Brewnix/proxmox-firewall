@@ -1,0 +1,10 @@
+all:
+  children:
+    proxmox:
+      hosts:
+        pve-firewall:
+          ansible_host: 192.168.0.84
+          ansible_user: ansible
+          ansible_become: true
+          ansible_become_method: sudo
+          ansible_python_interpreter: /usr/bin/python3
