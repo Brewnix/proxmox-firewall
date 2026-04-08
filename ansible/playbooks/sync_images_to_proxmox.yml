@@ -1,0 +1,66 @@
+---
+# Copy ISOs from ./images/ (scripts/download_images.sh) onto Proxmox default local ISO storage.
+- name: Preflight — manifest must exist on this machine
+  hosts: localhost
+  gather_facts: false
+  vars:
+    repo_root: "{{ playbook_dir | dirname | dirname }}"
+    manifest_path: "{{ repo_root }}/images/validated_images.json"
+  tasks:
+    - name: Check validated_images.json
+      ansible.builtin.stat:
+        path: "{{ manifest_path }}"
+      register: manifest_stat
+
+    - name: Fail with hint
+      ansible.builtin.fail:
+        msg: "Run ./scripts/download_images.sh from the repo root first (missing {{ manifest_path }})."
+      when: not manifest_stat.stat.exists
+
+- name: Sync ISOs to Proxmox node
+  hosts: proxmox
+  gather_facts: false
+  vars:
+    repo_root: "{{ playbook_dir | dirname | dirname }}"
+    manifest_path: "{{ repo_root }}/images/validated_images.json"
+    proxmox_local_iso_dir: /var/lib/vz/template/iso
+
+  tasks:
+    - name: Load validated_images.json
+      ansible.builtin.set_fact:
+        img_manifest: "{{ lookup('file', manifest_path) | from_json }}"
+
+    - name: Require OPNsense DVD in manifest
+      ansible.builtin.assert:
+        that:
+          - img_manifest.opnsense_dvd_iso_filename is defined
+          - img_manifest.opnsense_dvd_iso_filename | length > 0
+        fail_msg: "Manifest incomplete — run ./scripts/download_images.sh again."
+
+    - name: Ensure local ISO directory exists on Proxmox
+      ansible.builtin.file:
+        path: "{{ proxmox_local_iso_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Upload OPNsense DVD ISO (large)
+      ansible.builtin.copy:
+        src: "{{ repo_root }}/{{ img_manifest.opnsense_dvd_iso_relpath }}"
+        dest: "{{ proxmox_local_iso_dir }}/{{ img_manifest.opnsense_dvd_iso_filename }}"
+        mode: "0644"
+
+    - name: Terraform volume id hint
+      ansible.builtin.debug:
+        msg:
+          - "Uploaded {{ img_manifest.opnsense_dvd_iso_filename }} → {{ proxmox_local_iso_dir }}"
+          - "Terraform: opnsense_install_iso_file_id = \"{{ img_manifest.opnsense_install_iso_file_id }}\""
+          - "Or: cd terraform && terraform apply -var-file=generated/opnsense_install.auto.tfvars"
+
+    - name: Upload Proxmox host ISO when manifest includes it
+      when: img_manifest.proxmox_iso_relpath is defined and img_manifest.proxmox_version is defined
+      ansible.builtin.copy:
+        src: "{{ repo_root }}/{{ img_manifest.proxmox_iso_relpath }}"
+        dest: "{{ proxmox_local_iso_dir }}/{{ img_manifest.proxmox_version }}"
+        mode: "0644"

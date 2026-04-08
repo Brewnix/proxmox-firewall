@@ -1,4 +1,5 @@
 #cloud-config
+# Target Tailscale: 1.96.4 (apt pin). Repo URL uses Debian codename from /etc/os-release.
 hostname: tailscale
 fqdn: tailscale.brewnix.lan
 
@@ -16,8 +17,10 @@ packages:
   - curl
 
 runcmd:
-  - curl -fsSL https://tailscale.com/install.sh | sh
-  - tailscale up --authkey=${tailscale_auth_key} --advertise-routes=192.168.0.0/16,192.168.5.0/24 --accept-routes
+  - bash -lc 'CODENAME=$(. /etc/os-release && echo "$VERSION_CODENAME"); curl -fsSL "https://pkgs.tailscale.com/stable/debian/${CODENAME}.noarmor.gpg" | tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null; curl -fsSL "https://pkgs.tailscale.com/stable/debian/${CODENAME}.tailscale-keyring.list" | tee /etc/apt/sources.list.d/tailscale.list'
+  - apt-get update
+  - apt-get install -y 'tailscale=1.96.4*'
+  - tailscale up --authkey=${tailscale_auth_key} --advertise-routes=192.168.0.0/16 --accept-routes
   - echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
   - sysctl -p
 
@@ -25,4 +28,4 @@ write_files:
   - path: /etc/systemd/system/tailscale.service.d/override.conf
     content: |
       [Service]
-      Environment=TS_EXTRA_ARGS=--advertise-routes=192.168.0.0/16,192.168.5.0/24
+      Environment=TS_EXTRA_ARGS=--advertise-routes=192.168.0.0/16

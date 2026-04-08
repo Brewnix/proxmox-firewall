@@ -18,6 +18,7 @@ Welcome to the Proxmox Firewall project documentation! This directory contains c
 - **[Deployment Guide](../deployment/README.md)** - Automated deployment with Ansible
 - **[Site Configuration](../deployment/ansible/SITE_CONFIG.md)** - Site-specific configuration management
 - **[Manual Installation](deployment/MANUAL_INSTALLATION.md)** - Step-by-step manual setup
+- **[ISO / image sources](ISO_SOURCES.md)** - `scripts/download_images.sh`, Proxmox sync playbook, Terraform generated tfvars
 
 ### ⚙️ Configuration
 - **[Network Configuration](../config/NETWORK_PREFIX_FORMAT.md)** - VLAN and network design

@@ -1,4 +1,6 @@
 #cloud-config
+# Target Pi-hole: 6.4.1 — unattended installer tracks stable; run `pihole -v` after provision.
+# To hard-pin, use Pi-hole’s documented checkout procedure for Core/FTL once the instance is up.
 hostname: pihole
 fqdn: pihole.brewnix.lan
 

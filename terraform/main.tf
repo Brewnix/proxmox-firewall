@@ -1,17 +1,6 @@
 # =============================================
 # Cloud-Init Snippet Uploads (using correct syntax)
 # =============================================
-resource "proxmox_virtual_environment_file" "opnsense_user_data" {
-  content_type = "snippets"
-  datastore_id = "local"
-  node_name    = var.proxmox_node_name
-
-  source_file {
-    path = "${path.module}/cloud-init/opnsense.yml"
-    insecure = true
-  }
-}
-
 resource "proxmox_virtual_environment_file" "pihole_user_data" {
   content_type = "snippets"
   datastore_id = "local"
@@ -53,6 +42,19 @@ resource "proxmox_virtual_environment_vm" "opnsense" {
   vm_id     = 200
   name      = "opnsense"
   tags      = ["firewall", "opnsense"]
+
+  # Empty virtio disk has no bootloader → firmware falls through to iPXE ("no bootable disk").
+  # Install: upload OPNsense ISO, set opnsense_install_iso_file_id, apply, boot once from ISO,
+  # install to virtio0, then clear the variable (or set cdrom to none in UI) and boot_order disk-only.
+  boot_order = var.opnsense_install_iso_file_id != "" ? ["ide3", "virtio0"] : ["virtio0"]
+
+  dynamic "cdrom" {
+    for_each = var.opnsense_install_iso_file_id != "" ? [1] : []
+    content {
+      file_id   = var.opnsense_install_iso_file_id
+      interface = "ide3"
+    }
+  }
 
   cpu {
     cores = 4
@@ -96,10 +98,7 @@ resource "proxmox_virtual_environment_vm" "opnsense" {
     trunks = "10;20;30;40;50"
   }
 
-  initialization {
-    datastore_id      = "local-lvm"
-    user_data_file_id = proxmox_virtual_environment_file.opnsense_user_data.id
-  }
+  # OPNsense is FreeBSD-based — no cloud-init. Configure via installer console after ISO install.
 }
 
 # =============================================

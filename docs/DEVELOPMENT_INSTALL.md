@@ -26,11 +26,15 @@ cd proxmox-firewall
 ./deployment/scripts/prerequisites.sh
 ```
 
-### 2. Download Latest Images
+### 2. Download images (greenfield)
+
+From the repo root:
 
 ```bash
-./deployment/scripts/download_latest_images.sh
+./scripts/download_images.sh
 ```
+
+(Optional: `./deployment/scripts/download_latest_images.sh` — thin wrapper that runs the same script and mirrors `validated_images.json` under `deployment/ansible/group_vars/` for legacy playbooks.)
 
 ### 3. Configure Sites
 

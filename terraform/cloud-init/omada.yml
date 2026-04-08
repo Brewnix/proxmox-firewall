@@ -1,4 +1,5 @@
 #cloud-config
+# Target: Omada Software Controller 6.2.0.17 (adjust package string if repo uses a different suffix).
 hostname: omada
 fqdn: omada.brewnix.lan
 
@@ -20,8 +21,8 @@ packages:
 runcmd:
   - curl -fsSL https://repo.tp-link.com/debian/public.gpg | gpg --dearmor -o /usr/share/keyrings/tplink.gpg
   - echo "deb [signed-by=/usr/share/keyrings/tplink.gpg] https://repo.tp-link.com/debian stable main" > /etc/apt/sources.list.d/tplink.list
-  - apt update
-  - apt install -y omada-controller
+  - apt-get update
+  - apt-get install -y 'omada-controller=6.2.0.17*' || apt-get install -y omada-controller
   - systemctl enable omada
   - systemctl start omada
 

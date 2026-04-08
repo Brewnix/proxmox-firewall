@@ -2,7 +2,11 @@
 
 ## In Progress
 
+- Test on new hardware with limited resources
+- Migrate proxmox-local-legacy and common to new ansible and terraform
 - IP for proxmox needs to be dhcp to initialize then static in actual planned net (implemented, needs testing)
+- Clean up testing to replicate live system
+- Once everything is working we separate out a core of terraform and ansible for brewnix
 
 ## Fixes
 

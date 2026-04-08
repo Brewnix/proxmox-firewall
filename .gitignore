@@ -197,3 +197,6 @@ config.local.*
 # Backup configurations
 backup_configs/
 *.backup.yml
+
+network_devices.yaml
+OpnSenseXML/
