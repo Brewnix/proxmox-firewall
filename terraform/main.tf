@@ -104,6 +104,8 @@ resource "proxmox_virtual_environment_vm" "opnsense" {
 
 # =============================================
 # Pi-hole LXC
+# (No user_account.keys here: clone + ssh-public-keys breaks on LXC config PUT — bpg/proxmox#1905.
+#  Install the same key in the golden LXC template's /root/.ssh/authorized_keys before templating.)
 # =============================================
 resource "proxmox_virtual_environment_container" "pihole" {
   node_name = var.proxmox_node_name
@@ -139,10 +141,6 @@ resource "proxmox_virtual_environment_container" "pihole" {
         address = "192.168.0.10/16"
         gateway = "192.168.0.1"
       }
-    }
-
-    user_account {
-      keys = [var.ssh_public_key]
     }
   }
 }
@@ -184,10 +182,6 @@ resource "proxmox_virtual_environment_container" "tailscale" {
         address = "192.168.5.10/24"
       }
     }
-
-    user_account {
-      keys = [var.ssh_public_key]
-    }
   }
 }
 
@@ -227,10 +221,6 @@ resource "proxmox_virtual_environment_container" "omada" {
       ipv4 {
         address = "192.168.5.20/24"
       }
-    }
-
-    user_account {
-      keys = [var.ssh_public_key]
     }
   }
 }
