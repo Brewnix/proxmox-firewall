@@ -1,0 +1,187 @@
+# =============================================================================
+# SECURITY CRITICAL - Sensitive Infrastructure Files
+# =============================================================================
+
+# Environment files containing secrets
+.env
+.env.*
+!.env.example
+*.env
+
+# SSH Keys and Certificates
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+*.pfx
+*.jks
+
+# API Keys and Tokens
+*api_key*
+*api_token*
+*auth_key*
+*auth_token*
+*secret*
+*password*
+*credentials*
+
+# Proxmox and VM Secrets
+*.vmx
+*.nvram
+auto-installer-mode.toml
+proxmox-ve-custom.iso
+
+# Backup Files (may contain sensitive data)
+*.backup
+*.bak
+*.old
+*.orig
+
+# =============================================================================
+# Terraform Security
+# =============================================================================
+
+# Local .terraform directories
+.terraform/
+
+# .tfstate files (contain sensitive infrastructure state)
+*.tfstate
+*.tfstate.*
+terraform.tfstate*
+.terraform.lock.hcl
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Terraform variable files (likely to contain sensitive data)
+*.tfvars
+*.tfvars.json
+*.auto.tfvars
+*.auto.tfvars.json
+
+# Terraform override files (usually contain local secrets)
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Terraform lock files
+.terraform.tfstate.lock.info
+
+# Terraform CLI configuration files
+.terraformrc
+terraform.rc
+
+# Terraform plans (may contain sensitive data)
+*.tfplan
+*.tfplan.*
+
+# =============================================================================
+# Ansible Security
+# =============================================================================
+
+# Ansible vault files (encrypted secrets)
+*.vault
+*vault*
+group_vars/*/vault*
+host_vars/*/vault*
+
+# Ansible local files
+.ansible-lint
+.ansible/
+*.retry
+
+# Ansible logs (may contain sensitive output)
+ansible.log
+*.log
+
+# =============================================================================
+# Project Directories with Sensitive Data
+# =============================================================================
+
+# Credentials and certificates
+credentials/
+certs/
+certificates/
+secrets/
+
+# Downloaded images and temporary files
+images/
+logs/
+keys/
+tmp/
+temp/
+
+# =============================================================================
+# Development and Local Files
+# =============================================================================
+
+# Editor files
+.vscode/settings.json
+.vscode/launch.json
+.idea/
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Local configuration overrides
+local/
+config.local.*
+
+# Test output and coverage
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# =============================================================================
+# Custom Infrastructure Files
+# =============================================================================
+
+# Site-specific generated files
+config/sites/*.generated
+deployment_state/
+*.state
+
+# Custom ISO files
+*.iso
+
+# MAC address files (potentially sensitive)
+*mac_addresses*
+*device_inventory*
+
+# Network diagrams with sensitive topology
+*network_diagram*
+*topology*
+
+# Custom scripts with hardcoded values
+*custom*
+*private*
+
+# Local configuration files (but not management scripts)
+config.local.*
+*.local.yml
+*.local.yaml
+*.local.conf
+*.local.cfg
+
+# Backup configurations
+backup_configs/
+*.backup.yml
+
+network_devices.yaml
+OpnSenseXML/
