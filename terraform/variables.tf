@@ -11,13 +11,14 @@ variable "proxmox_node_name" {
 }
 
 variable "management_subnet" {
-  default = "192.168.0.0/23"   # VLAN 10 Main Network for initial access
+  default     = "192.168.5.0/24"
+  description = "VLAN 50 (Management) — infra VMs (Pi-hole, Omada, Tailscale, etc.); gateway typically 192.168.5.1 on OPNsense."
 }
 
 variable "template_name" {
   description = "Golden Cloud-Init template"
   type        = string
-  default     = "debian12-cloudinit-template"   # or the VM name you used
+  default     = "debian12-cloudinit-template" # or the VM name you used
 }
 
 variable "lxc_template_vmid" {
@@ -31,6 +32,47 @@ variable "lxc_template_vmid" {
 variable "ssh_public_key" {
   description = "SSH public key"
   type        = string
+}
+
+variable "tailscale_auth_key" {
+  type        = string
+  sensitive   = true
+  default     = ""
+  description = <<-EOT
+    Tailscale reusable auth key (tskey-auth-... from https://login.tailscale.com/admin/settings/keys).
+    Passed into cloud-init via Terraform templatefile (not a literal in the repo). Leave empty to skip automatic
+    "tailscale up" in cloud-init; join manually or set this in terraform.tfvars and re-apply the snippet.
+  EOT
+}
+
+variable "tailscale_advertise_routes" {
+  type        = string
+  default     = "192.168.0.0/16"
+  description = "CIDR advertised with tailscale up --advertise-routes (subnet router)."
+}
+
+variable "pihole_lxc_ipv4" {
+  type        = string
+  default     = "192.168.5.2/24"
+  description = "Pi-hole LXC IPv4 in CIDR form (Proxmox requires netmask), e.g. 192.168.5.2/24."
+
+  validation {
+    condition     = can(cidrhost(var.pihole_lxc_ipv4, 0))
+    error_message = "pihole_lxc_ipv4 must be a valid IPv4 CIDR (e.g. 192.168.5.2/24), not a bare host address."
+  }
+}
+
+variable "pihole_lxc_gateway" {
+  type        = string
+  default     = "192.168.5.1"
+  description = "Default gateway for Pi-hole LXC (OPNsense on VLAN 50)."
+}
+
+variable "pihole_admin_password" {
+  type        = string
+  sensitive   = true
+  default     = ""
+  description = "Pi-hole Web UI password for setupVars (unattended). If empty, cloud-init uses a placeholder; set in terraform.tfvars."
 }
 
 variable "opnsense_install_iso_file_id" {

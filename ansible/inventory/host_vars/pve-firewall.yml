@@ -1,5 +1,13 @@
 proxmox_nag_remove: true
 
+# Proxmox node name (Datacenter → node name, `hostname` on the host). Used for /etc/pve/nodes/<name>/...
+# Must match terraform `proxmox_node_name` (e.g. fw).
+pve_node_name: fw
+
+# Optional: SSH public key line for ansible@ inside the golden LXC (playbooks/lxc-golden-template.yml).
+# If unset, the playbook uses the first ssh- line from /home/ansible/.ssh/authorized_keys on the node.
+# lxc_golden_ssh_public_key: "ssh-ed25519 AAAA... comment"
+
 # Physical port names on your N305 (adjust if your NIC names differ)
 fiber_port: "nic0"          # or enpXs0 etc. - check with `ip link`
 starlink_port: "nic1"

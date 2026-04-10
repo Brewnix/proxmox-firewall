@@ -1,6 +1,5 @@
 # Not used by Terraform for the OPNsense VM.
 #
-# OPNsense on Proxmox should be installed from the official ISO (or supported image)
-# and configured via the text/serial installer — not Linux-style cloud-init.
-#
-# If you need unattended hints, use vendor docs or a post-install config restore from backup.
+# Proxmox may still show a “cloud-init” seed drive on the OPNsense QEMU VM; the guest OS is FreeBSD and does
+# not run Linux cloud-init user-data. Install from the official ISO and use the text/serial installer (or restore
+# config.xml from backup). See terraform/README.md (“Cloud-init: OPNsense vs Linux guests”).

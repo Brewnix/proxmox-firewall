@@ -46,6 +46,11 @@
         update_cache: true
         cache_valid_time: 3600
 
+    - name: Install Ansible on Proxmox host (drive playbooks from the node; idempotent with lxc-golden-template.yml)
+      ansible.builtin.apt:
+        name: ansible
+        state: present
+
     # === Nag Removal (persistent) ===
     - name: Remove subscription nag from JS
       ansible.builtin.replace:

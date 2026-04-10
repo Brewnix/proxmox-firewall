@@ -1,0 +1,49 @@
+#cloud-config
+# Rendered by Terraform (templatefile). Unattended Pi-hole requires /etc/pihole/setupVars.conf *before* install.
+# See terraform/README.md (Pi-hole LXC checklist).
+hostname: pihole
+fqdn: pihole.brewnix.lan
+
+users:
+  - name: ansible
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - git
+
+write_files:
+  - path: /etc/pihole/setupVars.conf
+    permissions: "0644"
+    content: |
+      PIHOLE_INTERFACE=eth0
+      IPV4_ADDRESS=${pihole_lxc_ipv4}
+      IPV4_GATEWAY=${pihole_lxc_gateway}
+      PIHOLE_DNS_1=1.1.1.1
+      PIHOLE_DNS_2=1.0.0.1
+      QUERY_LOGGING=true
+      INSTALL_WEB_SERVER=true
+      LIGHTTPD_ENABLED=true
+      WEBPASSWORD=${pihole_admin_password}
+      DNSMASQ_LISTENING=all
+      REV_SERVER=false
+      BLOCKING_ENABLED=true
+  - path: /etc/dnsmasq.d/99-local.conf
+    content: |
+      # Forward *.lan to OPNsense Unbound (mgmt interface)
+      server=/lan/192.168.5.1
+
+runcmd:
+  # Debian often binds :53 via systemd-resolved — free it before Pi-hole / dnsmasq
+  - bash -lc 'systemctl disable --now systemd-resolved 2>/dev/null || true'
+  - bash -lc 'systemctl mask systemd-resolved 2>/dev/null || true'
+  # LXC / non-standard image: skip strict OS check (still use a supported Debian base template)
+  - bash -lc 'export PIHOLE_SKIP_OS_CHECK=true; curl -sSL https://install.pi-hole.net | bash -s -- --unattended'
+  - systemctl enable pihole-FTL 2>/dev/null || true
+  - systemctl restart pihole-FTL 2>/dev/null || true

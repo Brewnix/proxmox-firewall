@@ -1,0 +1,213 @@
+---
+# Build or refresh the golden Debian LXC template used by Terraform (clone source for Pi-hole, Tailscale, Omada).
+#
+# Run: ansible-playbook -i inventory/hosts.yaml playbooks/lxc-golden-template.yml --limit pve-firewall
+#
+# Installs on the Proxmox host: ansible (for running playbooks from the node).
+# Installs inside the template CT: cloud-init, ansible, python3, sudo, curl, gnupg, ca-certificates; optional ansible user + SSH key.
+#
+# Vars (override with -e or host_vars):
+#   lxc_golden_vmid: 9001
+#   lxc_golden_force_rebuild: true   # destroys VMID first (destructive)
+#   lxc_golden_ssh_public_key: "ssh-ed25519 AAAA..."  # if empty, uses first ssh- line from /home/ansible/.ssh/authorized_keys on the node
+#   lxc_golden_net0: "name=eth0,bridge=vmbr2,ip=dhcp"   # set static if no DHCP on bridge, e.g. ip=192.168.5.50/24,gw=192.168.5.1
+#
+# After success: match terraform.tfvars lxc_template_vmid to lxc_golden_vmid, then destroy/recreate CTs 201–203.
+
+- name: Golden Debian LXC template (cloud-init + Ansible)
+  hosts: proxmox
+  become: true
+  gather_facts: true
+
+  vars:
+    lxc_golden_vmid: 9001
+    lxc_golden_hostname: debian-lxc-golden
+    lxc_golden_storage: local-lvm
+    lxc_golden_bridge: vmbr2
+    lxc_golden_rootfs_size: 12
+    lxc_golden_memory: 1024
+    lxc_golden_cores: 2
+    lxc_golden_force_rebuild: false
+    lxc_golden_ssh_public_key: ""
+    lxc_golden_net0: "name=eth0,bridge=vmbr2,ip=dhcp"
+
+  tasks:
+    - name: Set Python 3 on Proxmox
+      ansible.builtin.set_fact:
+        ansible_python_interpreter: /usr/bin/python3
+
+    - name: Install Ansible on Proxmox host
+      ansible.builtin.apt:
+        name: ansible
+        state: present
+        update_cache: true
+
+    - name: Refresh Proxmox template index
+      ansible.builtin.command: pveam update
+      changed_when: true
+
+    - name: Find cached debian-12-standard LXC template
+      ansible.builtin.find:
+        paths: /var/lib/vz/template/cache
+        patterns: debian-12-standard*.tar.zst
+        file_type: file
+      register: _debian12_vztmpl
+
+    - name: Fail if no Debian 12 standard template
+      ansible.builtin.fail:
+        msg: "No debian-12-standard*.tar.zst in /var/lib/vz/template/cache. On the node: pveam update && pveam download local debian-12-standard_amd64.tar.zst"
+      when: _debian12_vztmpl.files | length == 0
+
+    - name: Set ostemplate fact
+      ansible.builtin.set_fact:
+        lxc_golden_ostemplate: "local:vztmpl/{{ (_debian12_vztmpl.files | sort(attribute='path') | last).path | basename }}"
+
+    - name: Check if golden VMID already exists
+      ansible.builtin.stat:
+        path: "/etc/pve/nodes/{{ pve_node_name | default(inventory_hostname) }}/lxc/{{ lxc_golden_vmid }}.conf"
+      register: _golden_conf
+
+    - name: Read golden CT config when present
+      ansible.builtin.slurp:
+        path: "/etc/pve/nodes/{{ pve_node_name | default(inventory_hostname) }}/lxc/{{ lxc_golden_vmid }}.conf"
+      register: _golden_raw
+      when: _golden_conf.stat.exists
+
+    - name: Set is_template fact
+      ansible.builtin.set_fact:
+        lxc_golden_is_template: "{{ (_golden_raw.content | b64decode) is search('^template: 1', multiline=True) }}"
+      when: _golden_conf.stat.exists
+
+    - name: Set is_template when absent
+      ansible.builtin.set_fact:
+        lxc_golden_is_template: false
+      when: not _golden_conf.stat.exists
+
+    - name: Compute whether to build or refresh template
+      ansible.builtin.set_fact:
+        lxc_golden_needs_build: "{{ (not _golden_conf.stat.exists) or (lxc_golden_force_rebuild | bool) or (_golden_conf.stat.exists and not (lxc_golden_is_template | bool)) }}"
+
+    - name: Inform when skipping (already a template)
+      ansible.builtin.debug:
+        msg: "VMID {{ lxc_golden_vmid }} is already a template. Set -e lxc_golden_force_rebuild=true to destroy and recreate."
+      when:
+        - _golden_conf.stat.exists
+        - lxc_golden_is_template | bool
+        - not (lxc_golden_force_rebuild | bool)
+        - not (lxc_golden_needs_build | bool)
+
+    - name: Stop and destroy existing golden when forcing rebuild
+      when: lxc_golden_force_rebuild | bool and _golden_conf.stat.exists
+      block:
+        - name: Stop container
+          ansible.builtin.command: "pct stop {{ lxc_golden_vmid }}"
+          register: _pct_stop
+          failed_when: false
+          changed_when: _pct_stop.rc == 0
+
+        - name: Destroy VMID
+          ansible.builtin.command: "pct destroy {{ lxc_golden_vmid }}"
+          changed_when: true
+
+        - name: Clear stat after destroy
+          ansible.builtin.set_fact:
+            _golden_conf:
+              stat:
+                exists: false
+            lxc_golden_is_template: false
+            lxc_golden_needs_build: true
+
+    - name: Create golden CT
+      when: lxc_golden_needs_build | bool and not _golden_conf.stat.exists
+      ansible.builtin.shell: |
+        set -euo pipefail
+        pct create {{ lxc_golden_vmid }} '{{ lxc_golden_ostemplate }}' \
+          --hostname {{ lxc_golden_hostname }} \
+          --memory {{ lxc_golden_memory }} --cores {{ lxc_golden_cores }} \
+          --storage {{ lxc_golden_storage }} --rootfs {{ lxc_golden_storage }}:{{ lxc_golden_rootfs_size }} \
+          --net0 {{ lxc_golden_net0 }} \
+          --features nesting=1 \
+          --unprivileged 0 \
+          --onboot 0
+      changed_when: true
+
+    - name: Start golden CT
+      when: lxc_golden_needs_build | bool
+      ansible.builtin.command: "pct start {{ lxc_golden_vmid }}"
+      register: _pct_start_golden
+      failed_when: false
+      changed_when: _pct_start_golden.rc == 0
+
+    - name: Wait for outbound connectivity inside CT
+      when: lxc_golden_needs_build | bool
+      ansible.builtin.command: "pct exec {{ lxc_golden_vmid }} -- ping -c1 -W3 1.1.1.1"
+      register: _ping
+      until: _ping.rc == 0
+      retries: 30
+      delay: 3
+
+    - name: Install packages inside golden CT
+      when: lxc_golden_needs_build | bool
+      ansible.builtin.command: >
+        pct exec {{ lxc_golden_vmid }} --
+        bash -lc "export DEBIAN_FRONTEND=noninteractive;
+        apt-get update &&
+        apt-get install -y cloud-init ansible python3 sudo curl gnupg ca-certificates"
+      changed_when: true
+
+    - name: Stat deploy user authorized_keys on Proxmox host
+      when: lxc_golden_needs_build | bool and (lxc_golden_ssh_public_key | length == 0)
+      ansible.builtin.stat:
+        path: /home/ansible/.ssh/authorized_keys
+      register: _ak_stat
+
+    - name: Read authorized_keys for ansible user pubkey
+      when: lxc_golden_needs_build | bool and (lxc_golden_ssh_public_key | length == 0) and _ak_stat.stat.exists
+      ansible.builtin.slurp:
+        src: /home/ansible/.ssh/authorized_keys
+      register: _ak_slurp
+
+    - name: Derive lxc_golden_ssh_public_key from file
+      when: lxc_golden_needs_build | bool and (lxc_golden_ssh_public_key | length == 0) and (_ak_slurp is defined) and (_ak_slurp.content is defined)
+      ansible.builtin.set_fact:
+        lxc_golden_ssh_public_key: "{{ (_ak_slurp.content | b64decode).splitlines() | select('match', '^ssh-') | list | first | default('') }}"
+
+    - name: Stage SSH pubkey on Proxmox host for pct push
+      when: lxc_golden_needs_build | bool and (lxc_golden_ssh_public_key | length > 0)
+      ansible.builtin.copy:
+        dest: /tmp/lxc-golden-ansible.pub
+        content: "{{ lxc_golden_ssh_public_key }}\n"
+        mode: "0600"
+
+    - name: Push pubkey into golden CT
+      when: lxc_golden_needs_build | bool and (lxc_golden_ssh_public_key | length > 0)
+      ansible.builtin.command: "pct push {{ lxc_golden_vmid }} /tmp/lxc-golden-ansible.pub /root/lxc-golden-ansible.pub"
+      changed_when: true
+
+    - name: Create ansible user and authorized_keys in golden CT
+      when: lxc_golden_needs_build | bool and (lxc_golden_ssh_public_key | length > 0)
+      ansible.builtin.command: >
+        pct exec {{ lxc_golden_vmid }} --
+        bash -lc "set -e; id -u ansible 2>/dev/null || useradd -m -s /bin/bash ansible;
+        mkdir -p /home/ansible/.ssh;
+        grep -qFf /root/lxc-golden-ansible.pub /home/ansible/.ssh/authorized_keys 2>/dev/null || cat /root/lxc-golden-ansible.pub >> /home/ansible/.ssh/authorized_keys;
+        chown -R ansible:ansible /home/ansible/.ssh; chmod 700 /home/ansible/.ssh; chmod 600 /home/ansible/.ssh/authorized_keys;
+        echo 'ansible ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/ansible; chmod 0440 /etc/sudoers.d/ansible"
+      changed_when: true
+      no_log: true
+
+    - name: Stop golden CT
+      when: lxc_golden_needs_build | bool
+      ansible.builtin.command: "pct stop {{ lxc_golden_vmid }}"
+      changed_when: true
+
+    - name: Convert to template
+      when: lxc_golden_needs_build | bool
+      ansible.builtin.command: "pct template {{ lxc_golden_vmid }}"
+      changed_when: true
+
+    - name: Done
+      ansible.builtin.debug:
+        msg:
+          - "Golden LXC template: VMID {{ lxc_golden_vmid }} ({{ lxc_golden_hostname }})"
+          - "Set lxc_template_vmid={{ lxc_golden_vmid }} in terraform.tfvars; redeploy CTs 201-203 (terraform destroy -target / apply or replace in UI)."
