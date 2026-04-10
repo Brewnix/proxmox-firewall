@@ -16,7 +16,7 @@ Optional flags on the script: `--with-proxmox-iso`, `--with-opnsense-raw` (.img.
 
 | Artifact | Purpose |
 |----------|---------|
-| **OPNsense `*-OpenSSL-dvd-amd64.iso`** | Terraform **`opnsense_install_iso_file_id`** after upload (`local:iso/...`). |
+| **OPNsense `*-dvd-amd64.iso`** | Published as **`*.iso.bz2`** on [pkg.opnsense.org](https://pkg.opnsense.org/releases/); the script verifies checksums and **decompresses** to `.iso` for Proxmox. (Legacy `*OpenSSL-dvd*.iso` URLs are obsolete.) |
 | **Ubuntu LTS cloud `.img`** | Golden LXC / cloud-image workflows; paths in `validated_images.json`. |
 
 Manifest: **`images/validated_images.json`** (under gitignored **`images/`**). Keys include **`opnsense_install_iso_file_id`**, **`opnsense_dvd_iso_relpath`**, **`ubuntu_image_relpath`**, and optional **`proxmox_*`** / **`opnsense_image_*`**.

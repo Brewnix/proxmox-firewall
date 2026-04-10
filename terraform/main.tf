@@ -34,6 +34,15 @@ resource "proxmox_virtual_environment_file" "omada_user_data" {
   }
 }
 
+# If opnsense_install_iso_file_id is unset, read the same id scripts/download_images.sh writes to
+# images/validated_images.json (so apply works without -var-file=generated/... when the manifest exists).
+locals {
+  _opnsense_manifest_path = abspath("${path.module}/../images/validated_images.json")
+  _opnsense_manifest      = fileexists(local._opnsense_manifest_path) ? jsondecode(file(local._opnsense_manifest_path)) : {}
+  opnsense_install_iso_effective = trimspace(var.opnsense_install_iso_file_id) != "" ? trimspace(var.opnsense_install_iso_file_id) : trimspace(try(tostring(local._opnsense_manifest["opnsense_install_iso_file_id"]), ""))
+  opnsense_install_iso_attached  = local.opnsense_install_iso_effective != ""
+}
+
 # =============================================
 # OPNsense VM - Full VM
 # =============================================
@@ -44,15 +53,15 @@ resource "proxmox_virtual_environment_vm" "opnsense" {
   tags      = ["firewall", "opnsense"]
 
   # Empty virtio disk has no bootloader → firmware falls through to iPXE ("no bootable disk").
-  # Install: upload OPNsense ISO, set opnsense_install_iso_file_id, apply, boot once from ISO,
-  # install to virtio0, then clear the variable (or set cdrom to none in UI) and boot_order disk-only.
-  boot_order = var.opnsense_install_iso_file_id != "" ? ["ide3", "virtio0"] : ["virtio0"]
+  # CD on ide2 matches Proxmox UI defaults; ide3 often leaves the installer ISO missing or not first in boot order.
+  # After install: set opnsense_install_iso_file_id = "" and apply (boot disk-only), or remove CD in UI.
+  boot_order = local.opnsense_install_iso_attached ? ["ide2", "virtio0"] : ["virtio0"]
 
   dynamic "cdrom" {
-    for_each = var.opnsense_install_iso_file_id != "" ? [1] : []
+    for_each = local.opnsense_install_iso_attached ? [1] : []
     content {
-      file_id   = var.opnsense_install_iso_file_id
-      interface = "ide3"
+      file_id   = local.opnsense_install_iso_effective
+      interface = "ide2"
     }
   }
 
@@ -98,7 +107,14 @@ resource "proxmox_virtual_environment_vm" "opnsense" {
     trunks = "10;20;30;40;50"
   }
 
-  # OPNsense is FreeBSD-based — no cloud-init. Configure via installer console after ISO install.
+  # OPNsense is FreeBSD-based — no cloud-init. If this VM ever had initialization.user_data,
+  # removing it in Terraform can error (provider rebuild expects the old snippet volume).
+  # We ignore that block; delete the small cloud-init/seed CD from VM 200 in the Proxmox UI once.
+  lifecycle {
+    ignore_changes = [initialization]
+  }
+
+  # Configure via installer console after ISO install.
 }
 
 # =============================================

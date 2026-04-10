@@ -27,16 +27,17 @@ WITH_OPNSENSE_RAW=0
 WITH_DOCKER=0
 OPNSENSE_VERSION="${OPNSENSE_VERSION:-}"
 
+# All user-visible log lines go to stderr so stdout stays clean for $(command) captures.
 log_info() {
-  echo -e "${GREEN}[INFO]${NC} $1"
+  echo -e "${GREEN}[INFO]${NC} $1" >&2
   echo "[INFO] $1" >>"$LOG_FILE"
 }
 log_warn() {
-  echo -e "${YELLOW}[WARN]${NC} $1"
+  echo -e "${YELLOW}[WARN]${NC} $1" >&2
   echo "[WARN] $1" >>"$LOG_FILE"
 }
 log_error() {
-  echo -e "${RED}[ERROR]${NC} $1"
+  echo -e "${RED}[ERROR]${NC} $1" >&2
   echo "[ERROR] $1" >>"$LOG_FILE"
 }
 
@@ -96,6 +97,7 @@ check_command curl
 check_command jq
 check_command sha256sum
 check_command gpg
+check_command bzip2
 
 echo "{}" >"$JSON_OUT"
 
@@ -119,52 +121,88 @@ resolve_opnsense_version() {
     return
   fi
   local ver
-  ver=$(curl -sS "https://api.github.com/repos/opnsense/core/releases/latest" | jq -r '.tag_name' | sed 's/^v//')
-  if [[ -z "$ver" || "$ver" == "null" ]]; then
-    ver="26.1"
-    log_warn "Could not detect OPNsense version from GitHub; using fallback $ver"
+  ver=$(curl -sS -H "User-Agent: brewnix-proxmox-firewall-scripts" \
+    "https://api.github.com/repos/opnsense/core/releases/latest" | jq -r '.tag_name // empty' | sed 's/^v//')
+  if [[ -n "$ver" && "$ver" != "null" ]]; then
+    echo "$ver"
+    return
   fi
-  echo "$ver"
+  local try
+  for try in 26.1.2 26.1 25.7 24.7 24.1; do
+    if curl -sfI -o /dev/null "https://pkg.opnsense.org/releases/${try}/OPNsense-${try}-checksums-amd64.sha256"; then
+      log_warn "Could not read OPNsense version from GitHub; using first matching release on pkg.opnsense.org: $try"
+      echo "$try"
+      return
+    fi
+  done
+  log_warn "Using hardcoded fallback 25.7 (pkg.opnsense.org)"
+  echo "25.7"
 }
 
-# OPNsense DVD ISO — used by Terraform opnsense_install_iso_file_id after upload to Proxmox.
+# Verify artifact using OPNsense checksum file format: SHA256 (filename) = <hex>
+verify_opnsense_checksum_line() {
+  local sums_file=$1 artifact_name=$2 filepath=$3
+  local line expected actual
+  line=$(grep -F "(${artifact_name})" "$sums_file" | head -1) || return 1
+  expected=$(echo "$line" | sed 's/.*= //' | tr -d '\r\n[:space:]')
+  actual=$(sha256sum "$filepath" | awk '{print $1}')
+  [[ -n "$expected" && "$expected" == "$actual" ]]
+}
+
+# OPNsense ships DVD as .iso.bz2 + OPNsense-<ver>-checksums-amd64.sha256 (not OpenSSL-dvd.iso nor per-file .sha256).
 validate_opnsense_dvd_iso() {
-  local ver arch iso_name sha_url iso_url
+  local ver arch bz2_name iso_name base sums_url bz2_url sums_file
   ver="$(resolve_opnsense_version)"
   arch="amd64"
-  iso_name="OPNsense-${ver}-OpenSSL-dvd-${arch}.iso"
-  iso_url="https://pkg.opnsense.org/releases/${ver}/${iso_name}"
-  sha_url="https://pkg.opnsense.org/releases/${ver}/${iso_name}.sha256"
+  bz2_name="OPNsense-${ver}-dvd-${arch}.iso.bz2"
+  iso_name="OPNsense-${ver}-dvd-${arch}.iso"
+  base="https://pkg.opnsense.org/releases/${ver}"
+  sums_url="${base}/OPNsense-${ver}-checksums-${arch}.sha256"
+  bz2_url="${base}/${bz2_name}"
+  sums_file="$IMAGES_DIR/OPNsense-${ver}-checksums-${arch}.sha256"
 
-  log_info "OPNsense DVD ${ver} ($iso_name)"
+  log_info "OPNsense DVD ${ver}: fetch $bz2_name → decompress to $iso_name"
 
-  if ! curl -fsSL -o "$IMAGES_DIR/${iso_name}.sha256" "$sha_url"; then
-    log_error "Failed to download SHA256 for $iso_name"
+  local need_bz2=1
+  if ! curl -fsSL -o "$sums_file" "$sums_url"; then
+    log_error "No checksums at $sums_url (wrong version? try OPNSENSE_VERSION=26.1.2 or 25.7)"
     return 1
   fi
 
-  if [[ -f "$IMAGES_DIR/$iso_name" ]]; then
-    if (cd "$IMAGES_DIR" && sha256sum -c "${iso_name}.sha256" 2>/dev/null); then
-      log_info "Existing $iso_name already valid; skipping download"
+  if [[ -f "$IMAGES_DIR/$bz2_name" ]]; then
+    if verify_opnsense_checksum_line "$sums_file" "$bz2_name" "$IMAGES_DIR/$bz2_name"; then
+      need_bz2=0
+      log_info "Existing $bz2_name checksum OK"
     else
-      log_warn "Existing $iso_name failed checksum; re-downloading"
-      rm -f "$IMAGES_DIR/$iso_name"
+      log_warn "Existing $bz2_name bad checksum; re-downloading"
+      rm -f "$IMAGES_DIR/$bz2_name"
     fi
   fi
 
-  if [[ ! -f "$IMAGES_DIR/$iso_name" ]]; then
-    if ! curl -fL -o "$IMAGES_DIR/$iso_name" "$iso_url"; then
-      log_error "Failed to download $iso_url"
+  if [[ "$need_bz2" -eq 1 ]]; then
+    if ! curl -fL -o "$IMAGES_DIR/$bz2_name" "$bz2_url"; then
+      log_error "Failed to download $bz2_url"
       return 1
     fi
   fi
 
-  if ! (cd "$IMAGES_DIR" && sha256sum -c "${iso_name}.sha256" 2>/dev/null); then
-    log_error "SHA256 verification failed for $iso_name"
+  if ! verify_opnsense_checksum_line "$sums_file" "$bz2_name" "$IMAGES_DIR/$bz2_name"; then
+    log_error "SHA256 verification failed for $bz2_name"
+    return 1
+  fi
+
+  if [[ ! -f "$IMAGES_DIR/$iso_name" ]]; then
+    log_info "Decompressing $bz2_name (bunzip2 -k)…"
+    bunzip2 -fk "$IMAGES_DIR/$bz2_name"
+  fi
+
+  if [[ ! -f "$IMAGES_DIR/$iso_name" ]]; then
+    log_error "Expected $iso_name after decompress"
     return 1
   fi
 
   update_json "opnsense_version" "$ver"
+  update_json "opnsense_dvd_bz2_relpath" "$(relpath_from_repo "$IMAGES_DIR/$bz2_name")"
   update_json "opnsense_dvd_iso_filename" "$iso_name"
   update_json "opnsense_dvd_iso_abspath" "$IMAGES_DIR/$iso_name"
   update_json "opnsense_dvd_iso_relpath" "$(relpath_from_repo "$IMAGES_DIR/$iso_name")"
@@ -174,26 +212,29 @@ validate_opnsense_dvd_iso() {
 }
 
 validate_opnsense_raw_bz2() {
-  local ver arch image_name base_url image_url sha256_url
+  local ver arch image_name base sums_url image_url sums_file
   ver="$(resolve_opnsense_version)"
   arch="amd64"
-  image_name="OPNsense-${ver}-OpenSSL-${arch}.img.bz2"
-  base_url="https://mirror.ams1.nl.leaseweb.net/opnsense/releases/${ver}"
-  image_url="${base_url}/${image_name}"
-  sha256_url="${base_url}/OPNsense-${ver}-checksums-${arch}.sha256"
+  image_name="OPNsense-${ver}-vga-${arch}.img.bz2"
+  base="https://pkg.opnsense.org/releases/${ver}"
+  sums_url="${base}/OPNsense-${ver}-checksums-${arch}.sha256"
+  image_url="${base}/${image_name}"
+  sums_file="$IMAGES_DIR/OPNsense-${ver}-checksums-${arch}.sha256"
 
-  log_info "OPNsense raw image $image_name (optional)"
+  log_info "OPNsense VGA raw image $image_name (optional)"
 
-  if ! curl -fL -o "$IMAGES_DIR/$image_name" "$image_url"; then
-    log_error "Failed to download OPNsense raw $image_url"
+  if ! curl -fsSL -o "$sums_file" "$sums_url"; then
+    log_error "Failed to download checksums $sums_url"
     return 1
   fi
-  if curl -fsSL -o "$IMAGES_DIR/opnsense-checksums-${ver}.sha256" "$sha256_url"; then
-    if ! (cd "$IMAGES_DIR" && grep "$image_name" "opnsense-checksums-${ver}.sha256" | sha256sum -c - 2>/dev/null); then
-      log_warn "SHA256 check failed for raw image (mirror layout may differ)"
-    fi
+  if ! curl -fL -o "$IMAGES_DIR/$image_name" "$image_url"; then
+    log_error "Failed to download $image_url"
+    return 1
+  fi
+  if verify_opnsense_checksum_line "$sums_file" "$image_name" "$IMAGES_DIR/$image_name"; then
+    log_info "Raw image checksum OK"
   else
-    log_warn "No checksum file for raw image"
+    log_warn "SHA256 verification failed for $image_name"
   fi
   update_json "opnsense_image_path" "$IMAGES_DIR/$image_name"
   update_json "opnsense_image_relpath" "$(relpath_from_repo "$IMAGES_DIR/$image_name")"
@@ -201,12 +242,13 @@ validate_opnsense_raw_bz2() {
 }
 
 get_latest_ubuntu_lts() {
-  local current_year short_year year
-  current_year=$(date +%Y)
-  for year in $(seq 2018 2 $((current_year + 2))); do
-    short_year=$((year % 100))
-    if curl -s --head "https://cloud-images.ubuntu.com/${short_year}.04/current/" | grep -q "200 OK"; then
-      echo "${short_year}.04"
+  # Use stable release tree (…/releases/VV.04/release/…); /current/ often 404s from mirrors or older LTS layout.
+  local short v url
+  for short in $(seq 32 -2 14); do
+    v="${short}.04"
+    url="https://cloud-images.ubuntu.com/releases/${v}/release/ubuntu-${v}-server-cloudimg-amd64.img"
+    if curl -sfI -o /dev/null "$url"; then
+      echo "$v"
       return
     fi
   done
@@ -214,12 +256,13 @@ get_latest_ubuntu_lts() {
 }
 
 validate_ubuntu_image() {
-  local version=$1 arch image_name image_url sha256_url signature_url
+  local version=$1 arch image_name image_url sha256_url signature_url base
   arch="amd64"
   image_name="ubuntu-${version}-server-cloudimg-${arch}.img"
-  image_url="https://cloud-images.ubuntu.com/${version}/current/${image_name}"
-  sha256_url="https://cloud-images.ubuntu.com/${version}/current/SHA256SUMS"
-  signature_url="https://cloud-images.ubuntu.com/${version}/current/SHA256SUMS.gpg"
+  base="https://cloud-images.ubuntu.com/releases/${version}/release"
+  image_url="${base}/${image_name}"
+  sha256_url="${base}/SHA256SUMS"
+  signature_url="${base}/SHA256SUMS.gpg"
 
   log_info "Ubuntu cloud image ${version}"
 

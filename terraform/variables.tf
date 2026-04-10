@@ -37,9 +37,9 @@ variable "opnsense_install_iso_file_id" {
   type        = string
   default     = ""
   description = <<-EOT
-    Proxmox volume id for the OPNsense DVD installer ISO, e.g. local:iso/OPNsense-26.1-dvd-amd64.iso
-    (upload under Datacenter → storage → ISO). Must be the dvd-amd64.iso from pkg.opnsense.org — not the
-    .img.bz2 from deployment/scripts/download_latest_images.sh. See docs/ISO_SOURCES.md.
+    Proxmox volume id for the decompressed DVD installer, e.g. local:iso/OPNsense-26.1-dvd-amd64.iso
+    (upload under Datacenter → storage → ISO). Upstream ships OPNsense-*-dvd-amd64.iso.bz2; scripts/download_images.sh
+    verifies checksums and bunzip2s to .iso. See docs/ISO_SOURCES.md.
     Leave empty after install so boot_order is disk-only.
   EOT
 }

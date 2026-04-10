@@ -25,6 +25,7 @@ Welcome to the Proxmox Firewall project documentation! This directory contains c
 - **[Multi-site Setup](../README_MULTISITE.md)** - Managing multiple locations
 - **[Device Management](../README_DEVICES.md)** - Network device configuration
 - **[OPNsense Configuration](configuration/OPNSENSE.md)** - Firewall setup and rules
+- **[OPNsense web UI (first login)](OPNSENSE_WEB_UI.md)** - HTTPS GUI, listen interfaces, SSH, after root console
 - **[VPN Configuration](configuration/VPN.md)** - Tailscale and VPN setup
 
 ### 🔐 Security

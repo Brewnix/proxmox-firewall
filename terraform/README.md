@@ -6,9 +6,11 @@ Provisions the **OPNsense** VM and **LXC** workloads on a Proxmox node. Pair wit
 
 The OPNsense VM is created with an **empty** system disk until you run the installer from a **DVD ISO** on Proxmox.
 
-1. **`./scripts/download_images.sh`** — fetches the official **dvd-amd64.iso**, checksum-verified, into **`images/`**, writes **`images/validated_images.json`**, and generates **`terraform/generated/opnsense_install.auto.tfvars`** (gitignored).
+1. **`./scripts/download_images.sh`** — downloads **`OPNsense-*-dvd-amd64.iso.bz2`** from **pkg.opnsense.org**, verifies **`OPNsense-*-checksums-amd64.sha256`**, runs **`bunzip2`**, leaves **`images/OPNsense-*-dvd-amd64.iso`**, writes **`images/validated_images.json`**, and **`terraform/generated/opnsense_install.auto.tfvars`** (gitignored).
 2. **`ansible-playbook ansible/playbooks/sync_images_to_proxmox.yml`** — copies that ISO to the node’s default ISO directory (`/var/lib/vz/template/iso`).
-3. **`cd terraform && terraform apply -var-file=generated/opnsense_install.auto.tfvars`**
+3. **`cd terraform && terraform apply`** — if `opnsense_install_iso_file_id` is empty, the VM module reads **`../images/validated_images.json`** from **`scripts/download_images.sh`**. You can still pass **`-var-file=generated/opnsense_install.auto.tfvars`** to mirror that file.
+
+The installer CD is on **`ide2`** (Proxmox default). After OPNsense is on disk, set **`opnsense_install_iso_file_id = ""`** and apply so boot is **`virtio0`** only.
 
 See **[docs/ISO_SOURCES.md](../docs/ISO_SOURCES.md)** for flags and legacy wrapper behavior.
 
