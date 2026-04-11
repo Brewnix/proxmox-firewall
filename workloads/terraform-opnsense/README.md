@@ -1,6 +1,6 @@
 # OPNsense Terraform (browningluke/opnsense)
 
-Declarative firewall objects that the provider supports (aliases, filter rules, VLANs where implemented). This stack is **separate** from [workloads/terraform](../terraform/) (`bpg/proxmox` guests) and from [proxmox/](../../proxmox/) (hypervisor).
+Declarative OPNsense objects that the provider supports (firewall aliases/rules/NAT, interfaces, routes, Kea DHCP, Unbound, VPN pieces, etc.). This stack is **separate** from [workloads/terraform](../terraform/) (`bpg/proxmox` guests) and from [proxmox/](../../proxmox/) (hypervisor).
 
 ## Prerequisites
 
@@ -20,7 +20,7 @@ terraform plan
 
 ## Firewall aliases (import vs create)
 
-[`firewall_aliases.tf`](firewall_aliases.tf) defines the same aliases as **[`OpnSenseXML/ALIASES.xml`](../../OpnSenseXML/ALIASES.xml)** (networks, hosts, ports). DNS/DHCP/gateways/VLANs stay on the firewall; only **aliases** are codified here until you add filter rules.
+[`firewall_aliases.tf`](firewall_aliases.tf) lines up with **[`OpnSenseXML/ALIASES.xml`](../../OpnSenseXML/ALIASES.xml)** (networks, hosts, ports). You can add VLANs, Unbound, Kea, and filter rules in this module as you adopt them; **gateway groups / gateway objects** are still mostly GUI-only in the provider (see [Drift and gaps](#drift-and-gaps)).
 
 ### If aliases **already exist** on the firewall
 
@@ -73,12 +73,33 @@ terraform plan           # expect no changes once state matches the firewall
 
 The script covers **`opnsense_interfaces_vlan`**, **`opnsense_unbound_host_override`**, **`opnsense_unbound_forward`**, and **`opnsense_unbound_host_alias`**. It does **not** emit domain overrides (`opnsense_unbound_domain_override`) — add those by hand from the [provider docs](https://registry.terraform.io/providers/browningluke/opnsense/latest/docs) if your OPNsense version exposes them.
 
-## Filter rules (next step)
+## Kea DHCP (import from UI)
 
-Copy patterns from [examples/firewall_filter.tf.example](examples/firewall_filter.tf.example) into a new `.tf` file. Rules reference aliases by **name** (e.g. `LAN_NET`) — match [`OpnSenseXML/`](../../OpnSenseXML/) rule fragments when you add them.
+If **Kea DHCPv4** is configured in the GUI, generate **`opnsense_kea_subnet`**, **`opnsense_kea_reservation`**, and **`opnsense_kea_peer`** blocks plus imports (uses `getSubnet` / `getReservation` / `getPeer` for accurate option data):
+
+```bash
+export OPNSENSE_URI="https://192.168.5.1"
+export OPNSENSE_API_KEY="..."
+export OPNSENSE_API_SECRET="..."
+
+./scripts/generate_kea_imports.sh > generated_kea.tf.snippet
+# Review, save as kea.tf (or split), terraform fmt, run each terraform import
+# Order in output: subnets → reservations → peers
+terraform plan
+```
+
+If `terraform plan` shows diffs on subnets (pools/options), compare the GUI to the generated HCL — OPNsense’s JSON shape can differ slightly by version.
+
+**Import addresses:** Terraform resource names must **start with a letter or underscore**. Names like `192_168_1_0_24` are invalid; use the script output (it prefixes when needed, e.g. `kea_sn_192_168_1_0_24`) and keep the `resource` block label in `.tf` identical to the import line.
+
+## Firewall rules (XML / UI vs Terraform)
+
+For **now**, you can keep **authoritative** rules in **[`OpnSenseXML/`](../../OpnSenseXML/)** (or the GUI) and avoid managing the same rules in Terraform. When you are ready to move rules into Git, use **`opnsense_firewall_filter`** and patterns in [examples/firewall_filter.tf.example](examples/firewall_filter.tf.example) — rules reference aliases by **name** (e.g. `LAN_NET`). Do not edit the same rules in two places ([docs/GITOPS.md](../../docs/GITOPS.md)).
 
 ## Drift and gaps
 
 - **Pre-v1 provider** — pin `version` in `versions.tf` and read upstream release notes.
-- **Gateways / multi-WAN / full DHCP** — often still GUI-first; Kea subnets/reservations are in the provider. **Unbound** — host overrides, forwards, aliases, and domain overrides are supported; not every GUI-only knob is mapped. See [docs/GITOPS.md](../../docs/GITOPS.md).
-- Prefer **one** authority for overlapping objects (Git vs GUI).
+- **Kea DHCP** — **`./scripts/generate_kea_imports.sh`** helps adopt existing Kea config; provider resources: **`opnsense_kea_subnet`**, **`opnsense_kea_reservation`**, **`opnsense_kea_peer`** ([docs](https://registry.terraform.io/providers/browningluke/opnsense/latest/docs)). Legacy **ISC DHCP** is not the same path.
+- **Gateways / multi-WAN** — there is **no** gateway resource in this provider; static **`opnsense_route`** exists, but default gateway and gateway groups are still **GUI** (or API/scripts outside Terraform). Expect to keep that split or wait for upstream provider features.
+- **Firewall rules** — **`opnsense_firewall_filter`** (and NAT resources) are supported; [`OpnSenseXML/`](../../OpnSenseXML/) remains a valid parallel if you prefer XML import — pick **one** authority per object class ([docs/GITOPS.md](../../docs/GITOPS.md)).
+- Prefer **one** authority for overlapping objects (Git vs GUI vs XML).

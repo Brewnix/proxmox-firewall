@@ -142,8 +142,14 @@ def tf_str(s) -> str:
 
 used_names = set()
 
+
 def unique_tf_name(prefix: str, label: str) -> str:
+    """Terraform resource names must start with a letter or underscore (not a digit)."""
     base = slug(label, prefix)[:48]
+    if not base:
+        base = prefix
+    if not (base[0].isalpha() or base[0] == "_"):
+        base = f"{prefix}_{base}"[:60]
     n = base
     i = 0
     while n in used_names:

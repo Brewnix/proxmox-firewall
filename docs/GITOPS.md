@@ -14,7 +14,7 @@ Ansible: [proxmox/ansible](../proxmox/ansible/) (host, golden LXC, ISO sync) the
 
 - Run `terraform plan` (and gated `apply`) **per directory** above.
 - **Secrets**: Proxmox API token for `bpg` workloads; `OPNSENSE_*` or `terraform.tfvars` for OPNsense; never commit ([.gitignore](../.gitignore)).
-- **Drift**: choose one authority for firewall rules — Terraform in `workloads/terraform-opnsense`, or [OpnSenseXML/](../OpnSenseXML/) / XML import — and avoid editing the same objects in the GUI without importing.
+- **Drift**: choose one authority for firewall rules — Terraform in `workloads/terraform-opnsense`, or [OpnSenseXML/](../OpnSenseXML/) / XML import — and avoid editing the same objects in the GUI without importing. Kea DHCP can be imported via `workloads/terraform-opnsense/scripts/generate_kea_imports.sh` when moving DHCP into Terraform.
 
 ## Apply order
 
