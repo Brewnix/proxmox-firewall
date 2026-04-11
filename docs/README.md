@@ -9,29 +9,28 @@ Welcome to the Proxmox Firewall project documentation! This directory contains c
 - **[Contributing Guide](../CONTRIBUTING.md)** - How to contribute to the project
 - **[Security Policy](../SECURITY.md)** - Security practices and vulnerability reporting
 
-### 🔧 Setup and Installation
-- **[Prerequisites Guide](setup/PREREQUISITES.md)** - System requirements and dependencies
-- **[Hardware Setup](setup/HARDWARE.md)** - Hardware configuration and recommendations
-- **[Network Planning](setup/NETWORK_PLANNING.md)** - Network design and VLAN configuration
+### Setup and installation
+- **[Development install](DEVELOPMENT_INSTALL.md)** — toolchain and local setup
+- **[Network prefix / VLAN mapping](../config/NETWORK_PREFIX_FORMAT.md)** — address plan conventions
+- **[Proxmox answer file (host ISO)](PROXMOX_ANSWER_FILE.md)** — automated PVE install
 
-### 🚀 Deployment
-- **[Deployment Guide](../deployment/README.md)** - Automated deployment with Ansible
-- **[Site Configuration](../deployment/ansible/SITE_CONFIG.md)** - Site-specific configuration management
-- **[Manual Installation](deployment/MANUAL_INSTALLATION.md)** - Step-by-step manual setup
-- **[ISO / image sources](ISO_SOURCES.md)** - `scripts/download_images.sh`, Proxmox sync playbook, Terraform generated tfvars
+### Deployment
+- **[GitOps layout](GITOPS.md)** — Terraform state per root, apply order, secrets
+- **[Legacy migration](LEGACY_MIGRATION.md)** — `deployment/` and `common/terraform` vs `proxmox/` + `workloads/`
+- **[Deployment Guide](../deployment/README.md)** — older Ansible-orchestrated multi-site flow
+- **[ISO / image sources](ISO_SOURCES.md)** — `scripts/download_images.sh`, sync playbook, generated tfvars
 
-### ⚙️ Configuration
-- **[Network Configuration](../config/NETWORK_PREFIX_FORMAT.md)** - VLAN and network design
-- **[Multi-site Setup](../README_MULTISITE.md)** - Managing multiple locations
-- **[Device Management](../README_DEVICES.md)** - Network device configuration
-- **[OPNsense Configuration](configuration/OPNSENSE.md)** - Firewall setup and rules
-- **[OPNsense web UI (first login)](OPNSENSE_WEB_UI.md)** - HTTPS GUI, listen interfaces, SSH, after root console
-- **[VPN Configuration](configuration/VPN.md)** - Tailscale and VPN setup
+### Configuration
+- **[Network configuration](../config/NETWORK_PREFIX_FORMAT.md)** — VLAN and network design
+- **[Multi-site setup](../README_MULTISITE.md)** — multiple locations
+- **[Device management](../README_DEVICES.md)** — DHCP and device templates
+- **[OPNsense XML fragments](../OpnSenseXML/README.md)** — aliases and rule ordering (import or reference)
+- **[OPNsense Terraform](../workloads/terraform-opnsense/README.md)** — API-managed rules (browningluke provider)
+- **[OPNsense web UI (first login)](OPNSENSE_WEB_UI.md)** — HTTPS GUI, listen interfaces, SSH
 
-### 🔐 Security
-- **[Security Overview](SECURITY.md)** - Security features and best practices
-- **[Firewall Rules](configuration/FIREWALL_RULES.md)** - Detailed firewall configuration
-- **[Monitoring Setup](configuration/MONITORING.md)** - IDS/IPS and network monitoring
+### Security
+- **[Security policy](../SECURITY.md)** — reporting and practices
+- **[Troubleshooting](TROUBLESHOOTING.md)** — common issues
 
 ### 🧪 Testing
 - **[Testing Guide](../tests/README.md)** - Automated testing and validation
@@ -41,32 +40,28 @@ Welcome to the Proxmox Firewall project documentation! This directory contains c
 ### 🏠 Management
 - **[Local Management](LOCAL_MANAGEMENT.md)** - Automated Proxmox self-management system
 - **[Submodule Integration](SUBMODULE_STRATEGY.md)** – How to use this repo as a submodule in your own project
-- **[Main README: Using as a Submodule](../README.md#-using-as-a-submodule-recommended-for-integrators)** – Quick overview and workflow
+- **[Main README](../README.md)** — project overview (submodule consumers: see [SUBMODULE_STRATEGY](SUBMODULE_STRATEGY.md))
 
-### 🔌 Integration
-- **[API Documentation](API.md)** - API reference for automation
-- **[Automation Examples](integration/AUTOMATION.md)** - Scripts and automation examples
-- **[Monitoring Integration](integration/MONITORING.md)** - Prometheus, Grafana, and alerting
+### Integration
+- **[API documentation](API.md)** — automation notes
 
-### 📋 Reference
-- **[Changelog](../CHANGELOG.md)** - Release notes and changes
-- **[TODO](../TODO.md)** - Planned features and improvements
-- **[FAQ](reference/FAQ.md)** - Frequently asked questions
-- **[Glossary](reference/GLOSSARY.md)** - Technical terms and definitions
+### Reference
+- **[Changelog](../CHANGELOG.md)** — release notes
+- **[TODO](../TODO.md)** — planned work
+- **[FAQ](reference/FAQ.md)** — frequently asked questions
 
-## 🏗️ Documentation Structure
+## Documentation structure
 
 ```
 docs/
-├── README.md                 # This index file
-├── API.md                   # API documentation
-├── SECURITY.md              # Security policy
-├── TROUBLESHOOTING.md       # Common issues and solutions
-├── setup/                   # Installation and setup guides
-├── deployment/              # Deployment documentation
-├── configuration/           # Configuration guides
-├── integration/             # API and automation guides
-└── reference/               # Reference materials
+├── README.md            # This index
+├── GITOPS.md            # Terraform roots, state, CI
+├── LEGACY_MIGRATION.md  # deployment/ + common/terraform
+├── ISO_SOURCES.md
+├── API.md
+├── TROUBLESHOOTING.md
+└── reference/
+    └── FAQ.md
 ```
 
 ## 📖 Documentation Guidelines

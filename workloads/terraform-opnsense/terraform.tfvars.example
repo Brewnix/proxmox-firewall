@@ -1,0 +1,4 @@
+# Copy to terraform.tfvars (gitignored) and set real values.
+opnsense_uri          = "https://192.168.5.1"
+opnsense_api_key      = "your_api_key"
+opnsense_api_secret   = "your_api_secret"

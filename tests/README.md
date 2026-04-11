@@ -36,6 +36,7 @@ python -m pytest tests/
 python -m pytest tests/config/
 python -m pytest tests/ansible/
 python -m pytest tests/terraform/
+# Greenfield Ansible/Terraform under proxmox/ansible, workloads/terraform, workloads/terraform-opnsense
 
 # Run with coverage
 python -m pytest tests/ --cov=.

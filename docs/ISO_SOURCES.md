@@ -1,13 +1,13 @@
 # ISO and image sources (greenfield)
 
-Automation for downloading and staging images lives in **`scripts/download_images.sh`**, with **`ansible/playbooks/sync_images_to_proxmox.yml`** to copy ISOs onto the node. Outputs feed **`terraform/`** via `terraform/generated/opnsense_install.auto.tfvars` (gitignored).
+Automation for downloading and staging images lives in **`scripts/download_images.sh`**, with **`proxmox/ansible/playbooks/sync_images_to_proxmox.yml`** to copy ISOs onto the node. Outputs feed **`workloads/terraform/`** via `workloads/terraform/generated/opnsense_install.auto.tfvars` (gitignored).
 
 ## End-to-end (greenfield)
 
 ```bash
 ./scripts/download_images.sh
-ansible-playbook ansible/playbooks/sync_images_to_proxmox.yml
-cd terraform && terraform apply -var-file=generated/opnsense_install.auto.tfvars
+ansible-playbook proxmox/ansible/playbooks/sync_images_to_proxmox.yml
+cd workloads/terraform && terraform apply -var-file=generated/opnsense_install.auto.tfvars
 ```
 
 Optional flags on the script: `--with-proxmox-iso`, `--with-opnsense-raw` (.img.bz2), `--with-docker`, `--opnsense-version 26.1`.
@@ -34,4 +34,4 @@ Manifest: **`images/validated_images.json`** (under gitignored **`images/`**). K
 
 - **[DEVELOPMENT_INSTALL.md](DEVELOPMENT_INSTALL.md)** — environment setup; step 2 uses the new script path.
 - **[PROXMOX_ANSWER_FILE.md](PROXMOX_ANSWER_FILE.md)** — Proxmox **host** auto-install ISO (optional `--with-proxmox-iso`), not OPNsense guest.
-- **`terraform/README.md`** — Terraform + generated tfvars.
+- **[workloads/terraform/README.md](../workloads/terraform/README.md)** — Terraform + generated tfvars.

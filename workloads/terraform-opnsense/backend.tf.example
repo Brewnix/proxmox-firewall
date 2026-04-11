@@ -1,0 +1,9 @@
+# OPNsense API Terraform state — separate backend from bpg/proxmox workloads.
+#
+# terraform {
+#   backend "s3" {
+#     bucket = "my-org-terraform"
+#     key    = "proxmox-firewall/workloads-opnsense/terraform.tfstate"
+#     region = "us-east-1"
+#   }
+# }

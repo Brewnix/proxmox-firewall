@@ -195,8 +195,8 @@ cd docker-test-framework
 4. **Add/update tests** for your changes
 5. **Run linting tools**:
    ```bash
-   ansible-lint ansible/
-   terraform fmt -check terraform/
+   ansible-lint proxmox/ansible/ workloads/ansible/
+   terraform fmt -check workloads/terraform/ workloads/terraform-opnsense/
    yamllint config/
    ```
 

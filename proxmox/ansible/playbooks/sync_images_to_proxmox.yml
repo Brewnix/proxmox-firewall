@@ -56,7 +56,7 @@
         msg:
           - "Uploaded {{ img_manifest.opnsense_dvd_iso_filename }} → {{ proxmox_local_iso_dir }}"
           - "Terraform: opnsense_install_iso_file_id = \"{{ img_manifest.opnsense_install_iso_file_id }}\""
-          - "Or: cd terraform && terraform apply -var-file=generated/opnsense_install.auto.tfvars"
+          - "Or: cd workloads/terraform && terraform apply -var-file=generated/opnsense_install.auto.tfvars"
 
     - name: Upload Proxmox host ISO when manifest includes it
       when: img_manifest.proxmox_iso_relpath is defined and img_manifest.proxmox_version is defined

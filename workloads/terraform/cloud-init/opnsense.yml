@@ -2,4 +2,4 @@
 #
 # Proxmox may still show a “cloud-init” seed drive on the OPNsense QEMU VM; the guest OS is FreeBSD and does
 # not run Linux cloud-init user-data. Install from the official ISO and use the text/serial installer (or restore
-# config.xml from backup). See terraform/README.md (“Cloud-init: OPNsense vs Linux guests”).
+# config.xml from backup). See workloads/terraform/README.md (“Cloud-init: OPNsense vs Linux guests”).

@@ -1,0 +1,75 @@
+---
+# Apply Terraform-uploaded cloud-init snippets to LXC guests on the Proxmox node.
+# Run after: cd workloads/terraform && terraform apply
+#   ansible-playbook workloads/ansible/playbooks/lxc-apply-cloud-init-snippets.yml
+#
+# Snippets must exist under /var/lib/vz/snippets/ (local:snippets) — same names as
+# proxmox_virtual_environment_file in workloads/terraform/main.tf.
+#
+# Uses pct set --cicustom when the node's pct supports it; otherwise pct push to
+# NoCloud seed + cloud-init (see workloads/terraform/README.md).
+
+- name: Apply LXC cloud-init snippets from Proxmox storage
+  hosts: proxmox
+  become: true
+  gather_facts: false
+
+  vars:
+    # Default map matches workloads/terraform/main.tf VMIDs and snippet file names.
+    lxc_cloud_init_snippets:
+      - { vmid: 201, snippet: pihole.yaml, hostname: pihole }
+      - { vmid: 202, snippet: tailscale.yaml, hostname: tailscale }
+      - { vmid: 203, snippet: omada.yaml, hostname: omada }
+    snippets_dir: /var/lib/vz/snippets
+    nocloud_dir: /var/lib/cloud/seed/nocloud
+
+  tasks:
+    - name: Check whether pct supports cicustom
+      ansible.builtin.command: pct set --help
+      register: lxc_pct_help
+      changed_when: false
+
+    - name: Set fact pct_has_cicustom
+      ansible.builtin.set_fact:
+        lxc_pct_has_cicustom: "{{ 'cicustom' in (lxc_pct_help.stdout | default('')) }}"
+
+    - name: Apply cicustom user=local:snippets/... when supported
+      ansible.builtin.command: pct set {{ item.vmid }} --cicustom user=local:snippets/{{ item.snippet }}
+      loop: "{{ lxc_cloud_init_snippets }}"
+      when: lxc_pct_has_cicustom | bool
+      changed_when: true
+
+    - name: Ensure NoCloud directories exist in each CT
+      ansible.builtin.command: pct exec {{ item.vmid }} -- mkdir -p {{ nocloud_dir }}
+      loop: "{{ lxc_cloud_init_snippets }}"
+      when: not (lxc_pct_has_cicustom | bool)
+
+    - name: Write minimal meta-data for NoCloud (when not using cicustom)
+      ansible.builtin.shell: |
+        pct exec {{ item.vmid }} -- bash -c 'mkdir -p {{ nocloud_dir }} && printf "instance-id: lxc-%s\nlocal-hostname: %s\n" "{{ item.vmid }}" "{{ item.hostname }}" > {{ nocloud_dir }}/meta-data'
+      loop: "{{ lxc_cloud_init_snippets }}"
+      when: not (lxc_pct_has_cicustom | bool)
+      changed_when: true
+
+    - name: Push user-data from snippets to NoCloud path
+      ansible.builtin.command:
+        cmd: >-
+          pct push {{ item.vmid }}
+          {{ snippets_dir }}/{{ item.snippet }}
+          {{ nocloud_dir }}/user-data
+      loop: "{{ lxc_cloud_init_snippets }}"
+      when: not (lxc_pct_has_cicustom | bool)
+
+    - name: Run cloud-init clean (logs) inside CT
+      ansible.builtin.command: pct exec {{ item.vmid }} -- cloud-init clean --logs
+      loop: "{{ lxc_cloud_init_snippets }}"
+      when: not (lxc_pct_has_cicustom | bool)
+      failed_when: false
+      changed_when: true
+
+    - name: Run cloud-init (config + final) inside CT
+      ansible.builtin.command: pct exec {{ item.vmid }} -- bash -lc 'cloud-init init --local && cloud-init modules --mode=config && cloud-init modules --mode=final'
+      loop: "{{ lxc_cloud_init_snippets }}"
+      when: not (lxc_pct_has_cicustom | bool)
+      failed_when: false
+      changed_when: true

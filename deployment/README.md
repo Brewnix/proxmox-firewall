@@ -2,11 +2,13 @@
 
 This directory contains the deployment scripts for setting up Proxmox firewall systems across multiple sites.
 
+**Greenfield two-root layout** (preferred for new work): **[proxmox/](../proxmox/README.md)** (hypervisor Ansible) and **[workloads/](../workloads/README.md)** (guest Terraform + OPNsense API). See **[docs/LEGACY_MIGRATION.md](../docs/LEGACY_MIGRATION.md)** for how this relates to `deployment/` and `common/terraform`.
+
 ## Contents
 
 - `ansible/`: Ansible playbooks for automated deployment and configuration
 - `scripts/`: Helper scripts for site creation and deployment
-- `terraform/`: Infrastructure provisioning (called by Ansible)
+- `terraform/`: Legacy infrastructure provisioning (called by Ansible); greenfield guests live under **`workloads/terraform/`**
 - `config/`: External site configuration files (separate from automation)
 
 ## Architecture Overview

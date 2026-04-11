@@ -1,0 +1,28 @@
+# Example — uncomment into main.tf after `terraform init` and adjust to your interfaces.
+# Full schema: https://registry.terraform.io/providers/browningluke/opnsense/latest/docs/resources/firewall_filter
+#
+# resource "opnsense_firewall_filter" "allow_https_example" {
+#   enabled     = true
+#   description = "Example — allow inbound HTTPS (adjust interface + destination)"
+#
+#   interface = {
+#     interface = ["lan"]
+#   }
+#
+#   filter = {
+#     action    = "pass"
+#     direction = "in"
+#     protocol  = "TCP"
+#
+#     source = {
+#       net = "any"
+#     }
+#
+#     destination = {
+#       net  = "192.168.5.2"
+#       port = "443"
+#     }
+#
+#     log = true
+#   }
+# }

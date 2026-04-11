@@ -1,0 +1,9 @@
+# Guest / snippet Terraform state — keep separate from proxmox/terraform and workloads/terraform-opnsense.
+#
+# terraform {
+#   backend "s3" {
+#     bucket = "my-org-terraform"
+#     key    = "proxmox-firewall/workloads-guests/terraform.tfstate"
+#     region = "us-east-1"
+#   }
+# }

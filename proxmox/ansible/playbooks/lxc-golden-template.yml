@@ -1,7 +1,7 @@
 ---
 # Build or refresh the golden Debian LXC template used by Terraform (clone source for Pi-hole, Tailscale, Omada).
 #
-# Run: ansible-playbook -i inventory/hosts.yaml playbooks/lxc-golden-template.yml --limit pve-firewall
+# Run from repo root: ansible-playbook -i proxmox/ansible/inventory/hosts.yaml proxmox/ansible/playbooks/lxc-golden-template.yml --limit pve-firewall
 #
 # Installs on the Proxmox host: ansible (for running playbooks from the node).
 # Installs inside the template CT: cloud-init, ansible, python3, sudo, curl, gnupg, ca-certificates; optional ansible user + SSH key.

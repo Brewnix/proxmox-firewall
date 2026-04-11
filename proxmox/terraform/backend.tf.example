@@ -1,0 +1,10 @@
+# Rename to backend.tf and configure remote state for the Proxmox *node* stack only.
+# Example — Amazon S3 (replace bucket/key/region):
+#
+# terraform {
+#   backend "s3" {
+#     bucket = "my-org-terraform"
+#     key    = "proxmox-firewall/proxmox-node/terraform.tfstate"
+#     region = "us-east-1"
+#   }
+# }

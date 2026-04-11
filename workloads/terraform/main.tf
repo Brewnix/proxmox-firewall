@@ -48,7 +48,7 @@ resource "proxmox_virtual_environment_file" "omada_user_data" {
 # If opnsense_install_iso_file_id is unset, read the same id scripts/download_images.sh writes to
 # images/validated_images.json (so apply works without -var-file=generated/... when the manifest exists).
 locals {
-  _opnsense_manifest_path        = abspath("${path.module}/../images/validated_images.json")
+  _opnsense_manifest_path        = abspath("${path.module}/../../images/validated_images.json")
   _opnsense_manifest             = fileexists(local._opnsense_manifest_path) ? jsondecode(file(local._opnsense_manifest_path)) : {}
   opnsense_install_iso_effective = trimspace(var.opnsense_install_iso_file_id) != "" ? trimspace(var.opnsense_install_iso_file_id) : trimspace(try(tostring(local._opnsense_manifest["opnsense_install_iso_file_id"]), ""))
   opnsense_install_iso_attached  = local.opnsense_install_iso_effective != ""
