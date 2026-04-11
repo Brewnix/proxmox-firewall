@@ -55,6 +55,24 @@ Aliases on the firewall that **are not** in `firewall_aliases.tf` are listed as 
 
 Skip imports; `terraform apply` will **create** them from `firewall_aliases.tf`.
 
+## VLAN and Unbound (import from existing UI config)
+
+If you already created **VLANs** and **Unbound** objects in the GUI, generate matching `.tf` snippets and `terraform import` lines from the live API:
+
+```bash
+export OPNSENSE_URI="https://192.168.5.1"
+export OPNSENSE_API_KEY="..."
+export OPNSENSE_API_SECRET="..."
+
+./scripts/generate_unbound_vlan_imports.sh > generated_unbound_vlan.tf.snippet
+# Review the file, split into e.g. interfaces_vlan.tf / unbound_dns.tf, adjust names if needed
+terraform fmt
+terraform import '...'   # run each printed import from workloads/terraform-opnsense
+terraform plan           # expect no changes once state matches the firewall
+```
+
+The script covers **`opnsense_interfaces_vlan`**, **`opnsense_unbound_host_override`**, **`opnsense_unbound_forward`**, and **`opnsense_unbound_host_alias`**. It does **not** emit domain overrides (`opnsense_unbound_domain_override`) — add those by hand from the [provider docs](https://registry.terraform.io/providers/browningluke/opnsense/latest/docs) if your OPNsense version exposes them.
+
 ## Filter rules (next step)
 
 Copy patterns from [examples/firewall_filter.tf.example](examples/firewall_filter.tf.example) into a new `.tf` file. Rules reference aliases by **name** (e.g. `LAN_NET`) — match [`OpnSenseXML/`](../../OpnSenseXML/) rule fragments when you add them.
@@ -62,5 +80,5 @@ Copy patterns from [examples/firewall_filter.tf.example](examples/firewall_filte
 ## Drift and gaps
 
 - **Pre-v1 provider** — pin `version` in `versions.tf` and read upstream release notes.
-- **Gateways / multi-WAN / DHCP / Unbound** — not fully in this provider; keep managing in GUI or other tooling; see [docs/GITOPS.md](../../docs/GITOPS.md).
+- **Gateways / multi-WAN / full DHCP** — often still GUI-first; Kea subnets/reservations are in the provider. **Unbound** — host overrides, forwards, aliases, and domain overrides are supported; not every GUI-only knob is mapped. See [docs/GITOPS.md](../../docs/GITOPS.md).
 - Prefer **one** authority for overlapping objects (Git vs GUI).
