@@ -92,14 +92,14 @@ If `terraform plan` shows diffs on subnets (pools/options), compare the GUI to t
 
 **Import addresses:** Terraform resource names must **start with a letter or underscore**. Names like `192_168_1_0_24` are invalid; use the script output (it prefixes when needed, e.g. `kea_sn_192_168_1_0_24`) and keep the `resource` block label in `.tf` identical to the import line.
 
-## Firewall rules (XML / UI vs Terraform)
+## Firewall rules (GUI / CSV vs Terraform)
 
-For **now**, you can keep **authoritative** rules in **[`OpnSenseXML/`](../../OpnSenseXML/)** (or the GUI) and avoid managing the same rules in Terraform. When you are ready to move rules into Git, use **`opnsense_firewall_filter`** and patterns in [examples/firewall_filter.tf.example](examples/firewall_filter.tf.example) — rules reference aliases by **name** (e.g. `LAN_NET`). Do not edit the same rules in two places ([docs/GITOPS.md](../../docs/GITOPS.md)).
+For **now**, keep **authoritative** rules in the **GUI** (and use **CSV** import/export if your version exposes it for migrations). **[`OpnSenseXML/`](../../OpnSenseXML/)** in Git is for **reference and diffs**, not a built-in “import this XML file into rules” feature — full-box **XML** is only via **configuration backup/restore**. When you move rules into Git, use **`opnsense_firewall_filter`** and [examples/firewall_filter.tf.example](examples/firewall_filter.tf.example) — rules reference aliases by **name** (e.g. `LAN_NET`). Do not edit the same rules in two places ([docs/GITOPS.md](../../docs/GITOPS.md)).
 
 ## Drift and gaps
 
 - **Pre-v1 provider** — pin `version` in `versions.tf` and read upstream release notes.
 - **Kea DHCP** — **`./scripts/generate_kea_imports.sh`** helps adopt existing Kea config; provider resources: **`opnsense_kea_subnet`**, **`opnsense_kea_reservation`**, **`opnsense_kea_peer`** ([docs](https://registry.terraform.io/providers/browningluke/opnsense/latest/docs)). Legacy **ISC DHCP** is not the same path.
 - **Gateways / multi-WAN** — there is **no** gateway resource in this provider; static **`opnsense_route`** exists, but default gateway and gateway groups are still **GUI** (or API/scripts outside Terraform). Expect to keep that split or wait for upstream provider features.
-- **Firewall rules** — **`opnsense_firewall_filter`** (and NAT resources) are supported; [`OpnSenseXML/`](../../OpnSenseXML/) remains a valid parallel if you prefer XML import — pick **one** authority per object class ([docs/GITOPS.md](../../docs/GITOPS.md)).
-- Prefer **one** authority for overlapping objects (Git vs GUI vs XML).
+- **Firewall rules** — **`opnsense_firewall_filter`** (and NAT resources) are supported; the GUI may offer **CSV** import/export for rules in some versions. There is **no** separate “import firewall rules from XML” action — **XML** is for **full** configuration backup/restore ([`docs.opnsense.org` backups](https://docs.opnsense.org/manual/backups.html)); [`OpnSenseXML/`](../../OpnSenseXML/) in this repo is reference/diff material. Pick **one** authority per object class ([docs/GITOPS.md](../../docs/GITOPS.md)).
+- Prefer **one** authority for overlapping objects (Git vs GUI vs full-config XML backup).

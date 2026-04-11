@@ -199,3 +199,4 @@ backup_configs/
 
 network_devices.yaml
 OpnSenseXML/
+config-OPN*

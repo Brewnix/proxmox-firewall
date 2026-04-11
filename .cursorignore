@@ -184,3 +184,5 @@
 
 !network_devices.yaml
 !OpnSenseXML/
+config-OPN*
+
