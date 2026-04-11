@@ -188,3 +188,38 @@ resource "opnsense_firewall_alias" "alias_doorbell_wan_ports" {
   enabled     = true
   content     = toset(["1900", "5060", "5061", "10000:20000"])
 }
+
+# --- Aliases on firewall not mapped in firewall_aliases.tf ---
+# __CAM20VLAN_network  uuid=__CAM20VLAN_network
+# __GUEST40VLAN_network  uuid=__GUEST40VLAN_network
+# __IOT30VLAN_network  uuid=__IOT30VLAN_network
+# __K3SN60VLAN_network  uuid=__K3SN60VLAN_network
+# __K3SV70VLAN_network  uuid=__K3SV70VLAN_network
+# __MAIN10VLAN_network  uuid=__MAIN10VLAN_network
+# __MGMT50VLAN_network  uuid=__MGMT50VLAN_network
+# __lan_network  uuid=__lan_network
+# __lo0_network  uuid=__lo0_network
+# __opt10_network  uuid=__opt10_network
+# __opt11_network  uuid=__opt11_network
+# __opt12_network  uuid=__opt12_network
+# __opt13_network  uuid=__opt13_network
+# __opt14_network  uuid=__opt14_network
+# __opt15_network  uuid=__opt15_network
+# __opt16_network  uuid=__opt16_network
+# __opt17_network  uuid=__opt17_network
+# __opt18_network  uuid=__opt18_network
+# __opt19_network  uuid=__opt19_network
+# __opt1_network  uuid=__opt1_network
+# __opt2_network  uuid=__opt2_network
+# __opt3_network  uuid=__opt3_network
+# __opt4_network  uuid=__opt4_network
+# __opt5_network  uuid=__opt5_network
+# __opt6_network  uuid=__opt6_network
+# __opt7_network  uuid=__opt7_network
+# __opt8_network  uuid=__opt8_network
+# __opt9_network  uuid=__opt9_network
+# __wan_network  uuid=__wan_network
+# bogons  uuid=bogons
+# bogonsv6  uuid=bogonsv6
+# sshlockout  uuid=sshlockout
+# virusprot  uuid=virusprot

@@ -76,6 +76,9 @@ override.tf.json
 # Terraform lock files
 .terraform.tfstate.lock.info
 
+# OPNsense Terraform — generated Kea reservations from local YAML (see workloads/terraform-opnsense/README.md)
+workloads/terraform-opnsense/generated_kea_reservations.tf
+
 # Terraform CLI configuration files
 .terraformrc
 terraform.rc

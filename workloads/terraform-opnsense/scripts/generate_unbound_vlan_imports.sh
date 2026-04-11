@@ -181,6 +181,8 @@ print("")
 print("# =============================================================================")
 print("# opnsense_interfaces_vlan")
 print("# =============================================================================")
+print("# Omit `device` in saved .tf — it is optional+computed; setting it from the API")
+print("# vlanif string often forces replacement after import when state differs.")
 print("")
 
 vlan_blocks = []
@@ -192,7 +194,6 @@ for row in vlan_rows:
     tag = flatten_sel(row.get("tag"))
     parent = flatten_sel(row.get("if"))
     descr = flatten_sel(row.get("descr")) or flatten_sel(row.get("description")) or ""
-    vlanif = flatten_sel(row.get("vlanif")) or ""
     pcp = flatten_sel(row.get("pcp"))
     try:
         tag_n = int(tag) if tag is not None else 0
@@ -211,8 +212,6 @@ for row in vlan_rows:
     lines.append(f"  tag         = {tag_n}")
     lines.append(f"  priority    = {prio}")
     lines.append(f"  parent      = {tf_str(parent or '')}")
-    if vlanif:
-        lines.append(f"  device      = {tf_str(vlanif)}")
     lines.append("}")
     vlan_blocks.append("\n".join(lines))
     vlan_imports.append((name, u))
