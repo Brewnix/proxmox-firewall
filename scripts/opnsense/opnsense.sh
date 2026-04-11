@@ -179,7 +179,7 @@ get_aliases() {
     log_info "Retrieving firewall aliases..."
 
     local response
-    response=$(opnsense_api_request "GET" "/firewall/alias/search")
+    response=$(opnsense_api_request "GET" "/firewall/alias/searchItem?current=1&rowCount=9999")
 
     if [[ $? -eq 0 ]]; then
         echo "$response" | python3 -c "

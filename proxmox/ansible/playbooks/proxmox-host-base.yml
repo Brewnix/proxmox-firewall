@@ -226,18 +226,19 @@
       args:
         creates: /var/lib/vz/template/iso/debian-12-genericcloud-amd64.qcow2.bak   # idempotent
 
+    # Use qm(1) on the node — no Proxmox HTTP API credentials (proxmox_kvm needs api_host/api_user).
     - name: Create base VM for template (ID 9000)
-      community.general.proxmox_kvm:
-        vmid: 9000
-        name: debian12-cloudinit-template
-        memory: 2048
-        cores: 2
-        net0: virtio,bridge=vmbr2
-        ostype: l26
-        machine: q35
-        scsihw: virtio-scsi-pci
-        state: present
-        node: "{{ inventory_hostname }}"
+      ansible.builtin.command: >
+        qm create 9000
+        --name debian12-cloudinit-template
+        --memory 2048
+        --cores 2
+        --net0 virtio,bridge=vmbr2
+        --ostype l26
+        --machine q35
+        --scsihw virtio-scsi-pci
+      args:
+        creates: /etc/pve/nodes/{{ pve_node_name | default(inventory_hostname) }}/qemu-server/9000.conf
 
     - name: Import cloud image disk to the template VM
       ansible.builtin.command: >
@@ -259,9 +260,17 @@
         creates: /var/lib/vz/images/9000/vm-9000-disk-0.qcow2   # rough idempotency
 
     - name: Convert VM to template
-      ansible.builtin.command: qm template 9000
+      ansible.builtin.shell: |
+        cfg="/etc/pve/nodes/{{ pve_node_name | default(inventory_hostname) }}/qemu-server/9000.conf"
+        if [ -f "$cfg" ] && grep -q '^template: 1' "$cfg"; then
+          echo "already_template"
+          exit 0
+        fi
+        qm template 9000
       args:
-        creates: /etc/pve/nodes/{{ inventory_hostname }}/qemu-server/9000.conf.template   # approximate
+        executable: /bin/bash
+      register: qm_tpl_9000
+      changed_when: "'already_template' not in qm_tpl_9000.stdout"
 
   handlers:
     - name: restart ssh

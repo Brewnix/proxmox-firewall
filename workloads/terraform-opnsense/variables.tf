@@ -14,3 +14,9 @@ variable "opnsense_api_secret" {
   sensitive   = true
   description = "OPNsense API secret."
 }
+
+variable "opnsense_allow_insecure" {
+  type        = bool
+  description = "Skip TLS verification (self-signed cert or HTTPS by IP when cert has no IP SAN). Set false when using a trusted CA or a hostname that matches the certificate. Same idea as curl -k / OPNSENSE_ALLOW_INSECURE."
+  default     = true
+}

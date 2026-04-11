@@ -2,3 +2,5 @@
 opnsense_uri          = "https://192.168.5.1"
 opnsense_api_key      = "your_api_key"
 opnsense_api_secret   = "your_api_secret"
+# Default true: skip TLS verify (typical self-signed OPNsense GUI cert, or IP URL without IP in cert SAN).
+# opnsense_allow_insecure = false
