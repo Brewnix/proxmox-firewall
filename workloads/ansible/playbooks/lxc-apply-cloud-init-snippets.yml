@@ -65,6 +65,13 @@
     lxc_skip_dns_preflight: false
     # Skip cloud-init modules --mode=final (runcmd: Pi-hole curl, etc.); config/write_files still run.
     lxc_skip_cloud_init_final: false
+    # After modules:config, run instance/scripts/runcmd from Ansible (cc_runcmd only writes the file;
+    # scripts-user runs once per instance, so re-seeds often miss runcmd). chmod -x after success so
+    # modules:final runparts does not execute it twice.
+    lxc_execute_runcmd_after_config: true
+    # If true, run runcmd in every CT even when one fails, then fail the play with a summary (useful when
+    # e.g. Omada cannot reach www.tp-link.com / static.tp-link.com but Pi-hole/Tailscale should still apply).
+    lxc_runcmd_continue_on_error: false
     # Push NoCloud files only; skip requiring/running cloud-init (offline CTs with no apt path).
     lxc_seed_nocloud_only: false
 
@@ -260,11 +267,12 @@
 
     # Single-line pct + < /dev/null on the outer command (not multiline bash -c): multiline double-quoted
     # -c scripts produced empty stdout + rc 129 here. DEBIAN_FRONTEND + LC_* for apt/locale in config stage.
-    # Split stages so the failing task name identifies init-local vs config vs final (runcmd).
-    - name: Run cloud-init init --local inside each CT
+    # Full `cloud-init init` (not only --local) merges NoCloud user-data so cc_runcmd sees `#cloud-config`
+    # runcmd: during modules:config and writes instance/scripts/runcmd.
+    - name: Run cloud-init init inside each CT
       when: not (lxc_seed_nocloud_only | default(false) | bool)
       ansible.builtin.shell:
-        cmd: "pct exec {{ item.vmid }} -- env LC_ALL=C.UTF-8 LANG=C.UTF-8 DEBIAN_FRONTEND=noninteractive bash -c 'cloud-init init --local' < /dev/null"
+        cmd: "pct exec {{ item.vmid }} -- env LC_ALL=C.UTF-8 LANG=C.UTF-8 DEBIAN_FRONTEND=noninteractive bash -c 'cloud-init init' < /dev/null"
       loop: "{{ lxc_cloud_init_snippets }}"
       loop_control:
         label: "vmid={{ item.vmid }}"
@@ -278,6 +286,53 @@
       loop_control:
         label: "vmid={{ item.vmid }}"
       changed_when: true
+
+    - name: Execute instance/scripts/runcmd after modules config (authoritative bootstrap)
+      when:
+        - not (lxc_seed_nocloud_only | default(false) | bool)
+        - not (lxc_skip_cloud_init_final | default(false) | bool)
+        - lxc_execute_runcmd_after_config | default(true) | bool
+      ansible.builtin.shell:
+        cmd: |
+          pct exec {{ item.vmid }} -- bash -c '
+          set -euo pipefail
+          UD="{{ nocloud_dir }}/user-data"
+          if ! grep -q "^runcmd:" "$UD" 2>/dev/null; then
+            exit 0
+          fi
+          INST=$(readlink -f /var/lib/cloud/instance)
+          R="$INST/scripts/runcmd"
+          if [ ! -f "$R" ]; then
+            echo >&2 "vmid {{ item.vmid }}: user-data has runcmd: but $R is missing after modules:config."
+            echo >&2 "Check: cloud-init status, merged config, and that cloud-init init ran (not only init --local)."
+            exit 1
+          fi
+          export LC_ALL=C.UTF-8 LANG=C.UTF-8 DEBIAN_FRONTEND=noninteractive
+          export PIHOLE_SKIP_OS_CHECK=true
+          bash "$R"
+          chmod a-x "$R" || true
+          '
+      loop: "{{ lxc_cloud_init_snippets }}"
+      loop_control:
+        label: "vmid={{ item.vmid }}"
+      register: lxc_runcmd_result
+      ignore_errors: "{{ lxc_runcmd_continue_on_error | default(false) | bool }}"
+      changed_when: true
+
+    - name: Fail when any LXC runcmd step failed (after lxc_runcmd_continue_on_error=true)
+      when:
+        - lxc_runcmd_continue_on_error | default(false) | bool
+        - not (lxc_seed_nocloud_only | default(false) | bool)
+        - not (lxc_skip_cloud_init_final | default(false) | bool)
+        - lxc_execute_runcmd_after_config | default(true) | bool
+        - lxc_runcmd_result is defined
+        - (lxc_runcmd_result.results | default([]) | selectattr('rc', 'defined') | rejectattr('rc', 'equalto', 0) | list | length) > 0
+      ansible.builtin.fail:
+        msg: >-
+          runcmd failed for vmid(s)
+          {{ lxc_runcmd_result.results | selectattr('rc', 'defined') | rejectattr('rc', 'equalto', 0) | map(attribute='item') | map(attribute='vmid') | join(', ') }}.
+          Typical Omada: CT cannot resolve www.tp-link.com or static.tp-link.com (fix DNS / OPNsense WAN forward, then re-run).
+          Without continue-on-error, the play would have stopped on the first failing vmid.
 
     # cc_ssh_authkey_fingerprints (final stage) expects /etc/ssh/ssh_host_*; minimal templates often lack them.
     - name: Ensure SSH host keys exist before cloud-init final (ssh-keygen -A)
@@ -297,32 +352,6 @@
         - not (lxc_skip_cloud_init_final | default(false) | bool)
       ansible.builtin.shell:
         cmd: "pct exec {{ item.vmid }} -- env LC_ALL=C.UTF-8 LANG=C.UTF-8 DEBIAN_FRONTEND=noninteractive bash -c 'cloud-init modules --mode=final' < /dev/null"
-      loop: "{{ lxc_cloud_init_snippets }}"
-      loop_control:
-        label: "vmid={{ item.vmid }}"
-      changed_when: true
-
-    # cc_runcmd only writes instance/scripts/runcmd; cc_scripts_user runs it via runparts in final — once-per-instance.
-    # If scripts-user ran before runcmd was populated (re-seed / iterate), runparts never executes the Pi-hole/Tailscale/Omada script.
-    - name: Run staged instance/scripts/runcmd if the expected service is still missing
-      when:
-        - not (lxc_seed_nocloud_only | default(false) | bool)
-        - not (lxc_skip_cloud_init_final | default(false) | bool)
-      ansible.builtin.shell:
-        cmd: |
-          pct exec {{ item.vmid }} -- bash -c '
-          RUNCMD=$(readlink -f /var/lib/cloud/instance)/scripts/runcmd
-          test -f "$RUNCMD" || exit 0
-          case "$(hostname)" in
-            pihole)    test -x /usr/local/bin/pihole && exit 0 ;;
-            tailscale) command -v tailscale >/dev/null 2>&1 && exit 0 ;;
-            omada)     dpkg -s omada-controller >/dev/null 2>&1 && exit 0 ;;
-            *)         exit 0 ;;
-          esac
-          export LC_ALL=C.UTF-8 DEBIAN_FRONTEND=noninteractive
-          export PIHOLE_SKIP_OS_CHECK=true
-          bash "$RUNCMD"
-          '
       loop: "{{ lxc_cloud_init_snippets }}"
       loop_control:
         label: "vmid={{ item.vmid }}"

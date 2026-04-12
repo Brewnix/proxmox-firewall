@@ -7,18 +7,20 @@ apt update && apt upgrade -y
 # Install dependencies
 apt install -y openjdk-17-jdk-headless curl wget jsvc mongodb
 
-# Get latest Omada version and hash
-OMADA_DEB=$(curl -s https://www.tp-link.com/us/support/download/omada-software-controller/ | grep -o 'omada_v[0-9.]*_linux_x64_[0-9]*.deb' | head -n 1)
-OMADA_VER=$(echo $OMADA_DEB | grep -o 'omada_v[0-9.]*' | cut -d'_' -f2)
+# Resolve full CDN URL (TP-Link publishes direct https://static.tp-link.com/upload/software/.../*.deb
+# links; there is no apt repo at repo.tp-link.com). Filenames may be omada_v* or Omada_Network_Application_v*.
+PAGE='https://www.tp-link.com/us/support/download/omada-software-controller/'
+HTML=$(curl -fsSL -A 'Mozilla/5.0' "$PAGE")
+OMADA_URL=$(echo "$HTML" | grep -oE 'https://static\.tp-link\.com/upload/[^"<>[:space:]]+\.deb' | head -n 1)
+test -n "$OMADA_URL"
+OMADA_DEB=$(basename "$OMADA_URL")
+OMADA_VER=$(echo "$OMADA_DEB" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || echo unknown)
 
-# Get the date-based path from the download page
-OMADA_PATH=$(curl -s https://www.tp-link.com/us/support/download/omada-software-controller/ | grep -o 'software/[0-9]*/[0-9]*/[0-9]*' | head -n 1)
-
-echo "Installing Omada Controller version $OMADA_VER"
+echo "Installing Omada Controller (${OMADA_VER}) from ${OMADA_URL}"
 
 # Download and install Omada
 cd /tmp
-wget "https://static.tp-link.com/upload/${OMADA_PATH}/${OMADA_DEB}"
+wget "$OMADA_URL"
 dpkg -i ${OMADA_DEB} || true
 apt -f install -y
 

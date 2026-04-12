@@ -1,6 +1,8 @@
 #cloud-config
 # Rendered by Terraform (templatefile).
-# Target: Omada Software Controller 6.2.0.17 (adjust package string if repo uses a different suffix).
+# Install matches common/terraform/scripts/install_omada.sh: scrape the US download page for a
+# https://static.tp-link.com/upload/software/.../*.deb URL (there is no apt repo at repo.tp-link.com).
+# Prefers a URL containing 6.2.0.17 when present; otherwise first .deb on the page.
 hostname: omada
 fqdn: omada.brewnix.lan
 
@@ -22,18 +24,41 @@ users:
 package_update: true
 package_upgrade: true
 
+# Same deps as common/terraform/scripts/install_omada.sh (Omada .deb + runtime).
 packages:
   - curl
-  - gnupg
-  - apt-transport-https
+  - wget
+  - openjdk-17-jdk-headless
+  - jsvc
+  - mongodb
 
 runcmd:
-  - curl -fsSL https://repo.tp-link.com/debian/public.gpg | gpg --dearmor -o /usr/share/keyrings/tplink.gpg
-  - echo "deb [signed-by=/usr/share/keyrings/tplink.gpg] https://repo.tp-link.com/debian stable main" > /etc/apt/sources.list.d/tplink.list
-  - apt-get update
-  - apt-get install -y 'omada-controller=6.2.0.17*' || apt-get install -y omada-controller
-  - systemctl enable omada
-  - systemctl start omada
+  - |
+    set -euo pipefail
+    PAGE='https://www.tp-link.com/us/support/download/omada-software-controller/'
+    for h in www.tp-link.com static.tp-link.com; do
+      if ! getent hosts "$h" >/dev/null 2>&1; then
+        echo >&2 "Omada: cannot resolve $h — fix CT DNS, then re-run the snippet playbook."
+        exit 1
+      fi
+    done
+    HTML=$(curl -fsSL -A 'Mozilla/5.0' "$PAGE")
+    OMADA_URL=$(echo "$HTML" | grep -oE 'https://static\.tp-link\.com/upload/[^"<>[:space:]]+\.deb' | grep -F '6.2.0.17' | head -1) || true
+    if [ -z "${OMADA_URL:-}" ]; then
+      OMADA_URL=$(echo "$HTML" | grep -oE 'https://static\.tp-link\.com/upload/[^"<>[:space:]]+\.deb' | head -1)
+    fi
+    if [ -z "${OMADA_URL:-}" ]; then
+      echo >&2 "Omada: could not find a .deb URL on $PAGE (page layout may have changed)."
+      exit 1
+    fi
+    echo "Omada: downloading ${OMADA_URL}"
+    cd /tmp
+    DEB=$(basename "$OMADA_URL")
+    curl -fSL -o "$DEB" "$OMADA_URL"
+    dpkg -i "$DEB" || true
+    DEBIAN_FRONTEND=noninteractive apt-get -f install -y
+    systemctl enable omada
+    systemctl start omada
 
 write_files:
   - path: /etc/systemd/system/omada.service.d/override.conf
