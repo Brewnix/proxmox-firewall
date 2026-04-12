@@ -5,7 +5,7 @@ The **current** greenfield layout is:
 - **[proxmox/ansible/](../proxmox/ansible/)** — Proxmox VE host (repos, bridges, golden LXC template, ISO sync).
 - **[workloads/terraform/](../workloads/terraform/)** — `bpg/proxmox` for OPNsense VM, service LXCs, and snippet uploads.
 - **[workloads/terraform-opnsense/](../workloads/terraform-opnsense/)** — `browningluke/opnsense` for API-managed firewall objects.
-- **[workloads/ansible/](../workloads/ansible/)** — Guest automation (e.g. LXC cloud-init apply).
+- **[workloads/ansible/](../workloads/ansible/)** — Guest automation (e.g. LXC snippet apply).
 
 Older paths still in the tree:
 

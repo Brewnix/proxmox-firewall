@@ -1,13 +1,45 @@
 ---
 # Apply Terraform-uploaded cloud-init snippets to LXC guests on the Proxmox node.
 # Run after: cd workloads/terraform && terraform apply
+#
+# From repo root (uses ./ansible.cfg → proxmox/ansible/inventory/hosts.yaml):
 #   ansible-playbook workloads/ansible/playbooks/lxc-apply-cloud-init-snippets.yml
+#
+# If the first task seems stuck: apt is running inside the CT (no Ansible lines until it
+# finishes, or timeout). Or the CT cannot reach Debian mirrors — fix LXC IP/gateway/DNS/VLAN, or use:
+#   -e lxc_skip_cloud_init_install=true
+# when cloud-init is already baked into the template. Add -vv for pct/apt output.
+#
+# Staged build (OPNsense LAN-only / no working WAN yet): public DNS cannot resolve until the
+# firewall forwards; use -e lxc_skip_dns_preflight=true. Pi-hole's curl install still needs
+# internet — usually also -e lxc_skip_cloud_init_install=true until WAN is up, then re-run.
+#
+# To only seed snippets + write_files without running runcmd (Pi-hole curl, etc.):
+#   -e lxc_skip_cloud_init_final=true
+# Full "lab router upstream" staging in one shot (still needs cloud-init in the CT — bake into
+# the template, or run once without lxc_skip_cloud_init_install so apt can install it):
+#   -e lxc_skip_dns_preflight=true -e lxc_skip_cloud_init_install=true -e lxc_skip_cloud_init_final=true
+#
+# No network + no cloud-init in the CT yet — only push meta-data + user-data to NoCloud (no apt, no cloud-init run):
+#   -e lxc_skip_dns_preflight=true -e lxc_skip_cloud_init_install=true -e lxc_skip_cloud_init_final=true -e lxc_seed_nocloud_only=true
+#
+# Or set inventory explicitly:
+#   ansible-playbook -i proxmox/ansible/inventory/hosts.yaml workloads/ansible/playbooks/lxc-apply-cloud-init-snippets.yml
+#
+# Or: cd workloads/ansible && ansible-playbook playbooks/lxc-apply-cloud-init-snippets.yml
 #
 # Snippets must exist under /var/lib/vz/snippets/ (local:snippets) — same names as
 # proxmox_virtual_environment_file in workloads/terraform/main.tf.
 #
-# Uses pct set --cicustom when the node's pct supports it; otherwise pct push to
-# NoCloud seed + cloud-init (see workloads/terraform/README.md).
+# Always seed NoCloud inside the guest and run cloud-init there. Do not rely on
+# `pct set --cicustom` alone for LXCs — it does not replace running cloud-init in the container
+# (unlike a QEMU cloud image). See workloads/terraform/README.md.
+#
+# CT IP/default gateway come from Terraform, not this playbook. resolv.conf here does not put
+# the CT on "Proxmox LAN" — if apt cannot resolve, fix gateway/VLAN or use flat-LAN tfvars in README.
+#
+# Ansible UX: the "Notify when runcmd was skipped by -e …" task shows ok only if you passed
+# lxc_skip_cloud_init_final=true. If that task is "skipping", final ran (default lxc_skip_cloud_init_final=false).
 
 - name: Apply LXC cloud-init snippets from Proxmox storage
   hosts: proxmox
@@ -22,33 +54,148 @@
       - { vmid: 203, snippet: omada.yaml, hostname: omada }
     snippets_dir: /var/lib/vz/snippets
     nocloud_dir: /var/lib/cloud/seed/nocloud
+    # apt inside the CT can sit for a long time if the LXC has no route/DNS to Debian mirrors.
+    lxc_cloud_init_apt_timeout_sec: 900
+    # Proxmox/Terraform can show "no changes" while /etc/resolv.conf in the guest is still empty.
+    # This playbook overwrites resolv.conf before DNS checks unless disabled.
+    lxc_write_resolv_conf: true
+    # lxc_resolv_nameservers: set in inventory group_vars/proxmox.yml; override per host in host_vars/ or -e
+    # (play vars would override inventory — do not define it here).
+    # OPNsense may not forward public DNS until WAN is live; skip getent preflight during LAN-only staging.
+    lxc_skip_dns_preflight: false
+    # Skip cloud-init modules --mode=final (runcmd: Pi-hole curl, etc.); config/write_files still run.
+    lxc_skip_cloud_init_final: false
+    # Push NoCloud files only; skip requiring/running cloud-init (offline CTs with no apt path).
+    lxc_seed_nocloud_only: false
 
   tasks:
-    - name: Check whether pct supports cicustom
-      ansible.builtin.command: pct set --help
-      register: lxc_pct_help
-      changed_when: false
-
-    - name: Set fact pct_has_cicustom
+    - name: Normalize lxc_resolv_nameservers to a list (extra -e strings iterate char-by-char in Jinja)
       ansible.builtin.set_fact:
-        lxc_pct_has_cicustom: "{{ 'cicustom' in (lxc_pct_help.stdout | default('')) }}"
+        _lxc_resolv_ns: >-
+          {{
+            lxc_resolv_nameservers
+            if not (lxc_resolv_nameservers is string)
+            else (
+              (lxc_resolv_nameservers | trim | from_yaml)
+              if (lxc_resolv_nameservers | trim) is match('^\s*\[')
+              else (lxc_resolv_nameservers | trim | split(',') | map('trim') | reject('equalto', '') | list)
+            )
+          }}
 
-    - name: Apply cicustom user=local:snippets/... when supported
-      ansible.builtin.command: pct set {{ item.vmid }} --cicustom user=local:snippets/{{ item.snippet }}
+    - name: Ensure lxc_resolv_nameservers is non-empty after normalization
+      ansible.builtin.assert:
+        that:
+          - _lxc_resolv_ns | length > 0
+        fail_msg: "lxc_resolv_nameservers is empty or invalid after parsing — use a real list, e.g. -e '{\"lxc_resolv_nameservers\": [\"192.168.5.1\", \"1.1.1.1\"]}'"
+
+    - name: Explain first task (apt may look hung)
+      ansible.builtin.debug:
+        msg:
+          - "The next tasks run apt inside each CT if cloud-init is missing. Ansible prints nothing until each finishes (can be several minutes per CT)."
+          - "Resolvers used for /etc/resolv.conf (override lxc_resolv_nameservers): {{ _lxc_resolv_ns }}"
+          - "If DNS still fails with only the LAN gateway here, check OPNsense Unbound + firewall :53 from this VLAN + any DNS redirect to Pi-hole (see terraform/README.md)."
+          - "Offline CTs: add lxc_seed_nocloud_only=true with the other skips to only push NoCloud files (no cloud-init binary required). Otherwise lxc_skip_cloud_init_install needs cloud-init pre-installed."
+          - "Terraform lxc_dns_servers should match; use -e lxc_write_resolv_conf=false only if you manage resolv.conf elsewhere."
+          - "Or use -e lxc_skip_cloud_init_install=true if cloud-init is already in the image (curl in cloud-init still needs DNS)."
+
+    - name: Write /etc/resolv.conf inside each CT (matches Terraform lxc_dns_servers intent)
+      when: lxc_write_resolv_conf | default(true) | bool
+      ansible.builtin.shell: |
+        pct exec "{{ item.vmid }}" -- bash -c ': > /etc/resolv.conf'
+        {% for ns in _lxc_resolv_ns %}
+        pct exec "{{ item.vmid }}" -- bash -c 'echo "nameserver {{ ns }}" >> /etc/resolv.conf'
+        {% endfor %}
       loop: "{{ lxc_cloud_init_snippets }}"
-      when: lxc_pct_has_cicustom | bool
-      changed_when: true
+      loop_control:
+        label: "vmid={{ item.vmid }}"
+
+    - name: Preflight — each CT must resolve deb.debian.org (prints resolv.conf if this fails)
+      when: not (lxc_skip_dns_preflight | default(false) | bool)
+      ansible.builtin.shell: |
+        set -u
+        V="{{ item.vmid }}"
+        if pct exec "$V" -- getent hosts deb.debian.org >/dev/null 2>&1; then
+          exit 0
+        fi
+        echo "=== VMID $V: getent hosts deb.debian.org failed (same resolver libc uses for apt). ===" >&2
+        echo "--- /etc/resolv.conf ---" >&2
+        pct exec "$V" -- cat /etc/resolv.conf 2>&1 || true
+        echo "--- ip route ---" >&2
+        pct exec "$V" -- ip route 2>&1 || true
+        echo "--- ip route get 1.1.1.1 ---" >&2
+        pct exec "$V" -- ip route get 1.1.1.1 2>&1 || true
+        GW=$(pct exec "$V" -- sh -c "ip route show default 2>/dev/null | awk '/default/ {print \$3; exit}'")
+        echo "--- ping default gateway (${GW:-missing}) — if this fails, fix CT bridge/VLAN/IP; not a DNS list issue ---" >&2
+        if [ -n "${GW:-}" ]; then pct exec "$V" -- ping -c1 -W2 "$GW" 2>&1 || true; fi
+        echo "--- ping 1.1.1.1 (ICMP may be blocked; dig/curl matter more) ---" >&2
+        pct exec "$V" -- ping -c1 -W2 1.1.1.1 2>&1 || true
+        echo "--- HTTPS GET https://deb.debian.org/ (TCP 443; needs curl in CT) ---" >&2
+        pct exec "$V" -- bash -lc 'command -v curl >/dev/null 2>&1 && curl -4 -o /dev/null -fsSIL --connect-timeout 5 --max-time 15 https://deb.debian.org/ && echo OK || echo "(no curl or TCP failed)"' 2>&1 || true
+        NS=$(pct exec "$V" -- sh -c "grep '^nameserver' /etc/resolv.conf | head -1 | tr -s ' ' | cut -d' ' -f2")
+        echo "--- dig @${NS} deb.debian.org (first nameserver in resolv.conf) ---" >&2
+        pct exec "$V" -- bash -lc "command -v dig >/dev/null 2>&1 && dig @${NS} deb.debian.org +time=2 +tries=1 2>&1 || echo '(no dig)'" 2>&1 || true
+        echo "--- dig @1.1.1.1 deb.debian.org ---" >&2
+        pct exec "$V" -- bash -lc "command -v dig >/dev/null 2>&1 && dig @1.1.1.1 deb.debian.org +time=2 +tries=1 +short 2>&1 || true" 2>&1 || true
+        echo "--- If dig @1.1.1.1 times out: CT has no working path to the internet (UDP 53 to Cloudflare fails). Not fixable by changing resolv.conf. Check: (1) ping default gw above — must work. (2) Router: LAN→WAN, client isolation, forced-DNS/parental blocks to 1.1.1.1:53. (3) Proxmox: iptables/nft FORWARD for vmbr if you filter forwarded traffic. (4) Until fixed: -e lxc_skip_dns_preflight=true (and often skip cloud-init install/final). ---" >&2
+        echo "--- OPNsense mgmt DNS (192.168.5.1): Unbound + firewall :53 + DNS redirect before Pi-hole is up. ---" >&2
+        echo "See workloads/terraform/README.md (DNS inside service LXCs)." >&2
+        exit 1
+      loop: "{{ lxc_cloud_init_snippets }}"
+      loop_control:
+        label: "vmid={{ item.vmid }}"
+
+    - name: Skipped DNS preflight (staged LAN-only / WAN not ready)
+      when: lxc_skip_dns_preflight | default(false) | bool
+      ansible.builtin.debug:
+        msg:
+          - "lxc_skip_dns_preflight=true — not checking getent deb.debian.org (expected if OPNsense has no working WAN path yet)."
+          - "Unattended Pi-hole install (curl, apt) still requires internet later; re-run this playbook without skips when WAN/DNS forwarding works."
+
+    - name: Ensure cloud-init package in each CT (silent until apt finishes or timeout)
+      when: not (lxc_skip_cloud_init_install | default(false) | bool)
+      ansible.builtin.shell:
+        cmd: |
+          set -euo pipefail
+          timeout "{{ lxc_cloud_init_apt_timeout_sec }}" pct exec "{{ item.vmid }}" -- bash -lc '
+          command -v cloud-init >/dev/null 2>&1 && exit 0
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -qq \
+            -o Acquire::http::Timeout=25 \
+            -o Acquire::https::Timeout=25 \
+            -o Acquire::Retries=2
+          apt-get install -y -qq -o Dpkg::Use-Pty=0 cloud-init
+          '
+      loop: "{{ lxc_cloud_init_snippets }}"
+      loop_control:
+        label: "vmid={{ item.vmid }}"
+
+    - name: Skip notice when cloud-init install is skipped
+      when: lxc_skip_cloud_init_install | default(false) | bool
+      ansible.builtin.debug:
+        msg: "lxc_skip_cloud_init_install is true — cloud-init must already be installed in each CT (this playbook still runs cloud-init for config/final), unless lxc_seed_nocloud_only=true (files only)."
+
+    - name: Require cloud-init binary when apt install was skipped
+      when:
+        - lxc_skip_cloud_init_install | default(false) | bool
+        - not (lxc_seed_nocloud_only | default(false) | bool)
+      ansible.builtin.shell: |
+        pct exec "{{ item.vmid }}" -- bash -lc 'command -v cloud-init >/dev/null 2>&1' \
+          || {
+            echo >&2 "vmid {{ item.vmid }}: cloud-init not found. Omit -e lxc_skip_cloud_init_install so apt can install it (needs DNS to Debian mirrors), install cloud-init in the template, or use -e lxc_seed_nocloud_only=true to push NoCloud files only."
+            exit 1
+          }
+      loop: "{{ lxc_cloud_init_snippets }}"
+      loop_control:
+        label: "vmid={{ item.vmid }}"
 
     - name: Ensure NoCloud directories exist in each CT
       ansible.builtin.command: pct exec {{ item.vmid }} -- mkdir -p {{ nocloud_dir }}
       loop: "{{ lxc_cloud_init_snippets }}"
-      when: not (lxc_pct_has_cicustom | bool)
 
-    - name: Write minimal meta-data for NoCloud (when not using cicustom)
+    - name: Write minimal meta-data for NoCloud
       ansible.builtin.shell: |
         pct exec {{ item.vmid }} -- bash -c 'mkdir -p {{ nocloud_dir }} && printf "instance-id: lxc-%s\nlocal-hostname: %s\n" "{{ item.vmid }}" "{{ item.hostname }}" > {{ nocloud_dir }}/meta-data'
       loop: "{{ lxc_cloud_init_snippets }}"
-      when: not (lxc_pct_has_cicustom | bool)
       changed_when: true
 
     - name: Push user-data from snippets to NoCloud path
@@ -58,18 +205,132 @@
           {{ snippets_dir }}/{{ item.snippet }}
           {{ nocloud_dir }}/user-data
       loop: "{{ lxc_cloud_init_snippets }}"
-      when: not (lxc_pct_has_cicustom | bool)
+
+    # Debian cloud.cfg default_user is debian; our snippets use ansible only — user-data must override
+    # system_info or cc_ssh_authkey_fingerprints raises getpwnam('debian'). Stale /var/lib/vz/snippets/*
+    # (forgot terraform apply after editing .tftpl) produces user-data without this block.
+    - name: Verify pushed user-data contains system_info (terraform apply if this fails)
+      when: not (lxc_seed_nocloud_only | default(false) | bool)
+      ansible.builtin.shell: |
+        pct exec "{{ item.vmid }}" -- grep -q '^system_info:' "{{ nocloud_dir }}/user-data" \
+          || {
+            echo >&2 "vmid {{ item.vmid }}: NoCloud user-data has no '^system_info:' block."
+            echo >&2 "Refresh snippets on the node: cd workloads/terraform && terraform apply — then re-run this playbook."
+            exit 1
+          }
+      loop: "{{ lxc_cloud_init_snippets }}"
+      loop_control:
+        label: "vmid={{ item.vmid }}"
+
+    # Debian /etc/cloud/cloud.cfg sets system_info.default_user to debian; cc_ssh_authkey_fingerprints
+    # uses getpwnam(that). NoCloud user-data system_info can fail to win in merge order — this drop-in
+    # loads with cloud.cfg.d and reliably overrides before modules:final.
+    # echo lines avoid YAML-indent pollution in heredocs; backs up user-data if merge order regresses.
+    - name: Install cloud.cfg.d default_user override inside each CT (ansible, not debian)
+      when: not (lxc_seed_nocloud_only | default(false) | bool)
+      ansible.builtin.shell:
+        cmd: 'pct exec {{ item.vmid }} -- sh -c "mkdir -p /etc/cloud/cloud.cfg.d && echo system_info: > /etc/cloud/cloud.cfg.d/99-brewnix-default-user.cfg && echo \"  default_user:\" >> /etc/cloud/cloud.cfg.d/99-brewnix-default-user.cfg && echo \"    name: ansible\" >> /etc/cloud/cloud.cfg.d/99-brewnix-default-user.cfg"'
+      loop: "{{ lxc_cloud_init_snippets }}"
+      loop_control:
+        label: "vmid={{ item.vmid }}"
+      changed_when: true
+
+    - name: Seed-only — NoCloud on disk; cloud-init not installed or executed
+      when: lxc_seed_nocloud_only | default(false) | bool
+      ansible.builtin.debug:
+        msg:
+          - "lxc_seed_nocloud_only=true — wrote meta-data + user-data under {{ nocloud_dir }} in each CT."
+          - "When the CT has network: pct exec <vmid> -- apt-get install -y cloud-init, then re-run without lxc_seed_nocloud_only / lxc_skip_cloud_init_install (and adjust other skips) so cloud-init applies the snippet."
 
     - name: Run cloud-init clean (logs) inside CT
-      ansible.builtin.command: pct exec {{ item.vmid }} -- cloud-init clean --logs
+      when: not (lxc_seed_nocloud_only | default(false) | bool)
+      ansible.builtin.shell:
+        cmd: |
+          pct exec {{ item.vmid }} -- bash -c '
+          # /var/lib/cloud/instance must be a symlink (instance_link). A plain directory breaks
+          # init-local with IsADirectoryError when cloud-init tries to unlink it.
+          if [ -d /var/lib/cloud/instance ] && [ ! -L /var/lib/cloud/instance ]; then
+            rm -rf /var/lib/cloud/instance
+          fi
+          cloud-init clean --logs
+          '
       loop: "{{ lxc_cloud_init_snippets }}"
-      when: not (lxc_pct_has_cicustom | bool)
       failed_when: false
       changed_when: true
 
-    - name: Run cloud-init (config + final) inside CT
-      ansible.builtin.command: pct exec {{ item.vmid }} -- bash -lc 'cloud-init init --local && cloud-init modules --mode=config && cloud-init modules --mode=final'
+    # Single-line pct + < /dev/null on the outer command (not multiline bash -c): multiline double-quoted
+    # -c scripts produced empty stdout + rc 129 here. DEBIAN_FRONTEND + LC_* for apt/locale in config stage.
+    # Split stages so the failing task name identifies init-local vs config vs final (runcmd).
+    - name: Run cloud-init init --local inside each CT
+      when: not (lxc_seed_nocloud_only | default(false) | bool)
+      ansible.builtin.shell:
+        cmd: "pct exec {{ item.vmid }} -- env LC_ALL=C.UTF-8 LANG=C.UTF-8 DEBIAN_FRONTEND=noninteractive bash -c 'cloud-init init --local' < /dev/null"
       loop: "{{ lxc_cloud_init_snippets }}"
-      when: not (lxc_pct_has_cicustom | bool)
-      failed_when: false
+      loop_control:
+        label: "vmid={{ item.vmid }}"
       changed_when: true
+
+    - name: Run cloud-init modules --mode=config inside each CT
+      when: not (lxc_seed_nocloud_only | default(false) | bool)
+      ansible.builtin.shell:
+        cmd: "pct exec {{ item.vmid }} -- env LC_ALL=C.UTF-8 LANG=C.UTF-8 DEBIAN_FRONTEND=noninteractive bash -c 'cloud-init modules --mode=config' < /dev/null"
+      loop: "{{ lxc_cloud_init_snippets }}"
+      loop_control:
+        label: "vmid={{ item.vmid }}"
+      changed_when: true
+
+    # cc_ssh_authkey_fingerprints (final stage) expects /etc/ssh/ssh_host_*; minimal templates often lack them.
+    - name: Ensure SSH host keys exist before cloud-init final (ssh-keygen -A)
+      when:
+        - not (lxc_seed_nocloud_only | default(false) | bool)
+        - not (lxc_skip_cloud_init_final | default(false) | bool)
+      ansible.builtin.shell:
+        cmd: "pct exec {{ item.vmid }} -- ssh-keygen -A"
+      loop: "{{ lxc_cloud_init_snippets }}"
+      loop_control:
+        label: "vmid={{ item.vmid }}"
+      changed_when: true
+
+    - name: Run cloud-init modules --mode=final inside each CT (runcmd e.g. Pi-hole install)
+      when:
+        - not (lxc_seed_nocloud_only | default(false) | bool)
+        - not (lxc_skip_cloud_init_final | default(false) | bool)
+      ansible.builtin.shell:
+        cmd: "pct exec {{ item.vmid }} -- env LC_ALL=C.UTF-8 LANG=C.UTF-8 DEBIAN_FRONTEND=noninteractive bash -c 'cloud-init modules --mode=final' < /dev/null"
+      loop: "{{ lxc_cloud_init_snippets }}"
+      loop_control:
+        label: "vmid={{ item.vmid }}"
+      changed_when: true
+
+    # cc_runcmd only writes instance/scripts/runcmd; cc_scripts_user runs it via runparts in final — once-per-instance.
+    # If scripts-user ran before runcmd was populated (re-seed / iterate), runparts never executes the Pi-hole/Tailscale/Omada script.
+    - name: Run staged instance/scripts/runcmd if the expected service is still missing
+      when:
+        - not (lxc_seed_nocloud_only | default(false) | bool)
+        - not (lxc_skip_cloud_init_final | default(false) | bool)
+      ansible.builtin.shell:
+        cmd: |
+          pct exec {{ item.vmid }} -- bash -c '
+          RUNCMD=$(readlink -f /var/lib/cloud/instance)/scripts/runcmd
+          test -f "$RUNCMD" || exit 0
+          case "$(hostname)" in
+            pihole)    test -x /usr/local/bin/pihole && exit 0 ;;
+            tailscale) command -v tailscale >/dev/null 2>&1 && exit 0 ;;
+            omada)     dpkg -s omada-controller >/dev/null 2>&1 && exit 0 ;;
+            *)         exit 0 ;;
+          esac
+          export LC_ALL=C.UTF-8 DEBIAN_FRONTEND=noninteractive
+          export PIHOLE_SKIP_OS_CHECK=true
+          bash "$RUNCMD"
+          '
+      loop: "{{ lxc_cloud_init_snippets }}"
+      loop_control:
+        label: "vmid={{ item.vmid }}"
+      changed_when: true
+
+    - name: Notify when runcmd was skipped (only if lxc_skip_cloud_init_final=true)
+      when:
+        - lxc_skip_cloud_init_final | default(false) | bool
+        - not (lxc_seed_nocloud_only | default(false) | bool)
+      ansible.builtin.debug:
+        msg: "You set lxc_skip_cloud_init_final=true — cloud-init final (runcmd) did not run. Re-run without it when CTs can reach the internet for Pi-hole/Tailscale/Omada install steps."

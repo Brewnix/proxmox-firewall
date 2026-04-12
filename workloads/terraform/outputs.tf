@@ -9,7 +9,7 @@ output "opnsense_install_iso_attached" {
 }
 
 output "lxc_cloud_init_snippet_ids" {
-  description = "Proxmox file ids for uploaded cloud-init snippets (attach to LXC with pct set … cicustom user=… — see terraform/README.md)."
+  description = "Proxmox file ids for uploaded snippets. Terraform does not attach them — run ansible-playbook workloads/ansible/playbooks/lxc-apply-cloud-init-snippets.yml (or scripts/attach_lxc_cloud_init_snippets.sh on the node) then reboot LXCs. See terraform/README.md."
   value = {
     pihole    = proxmox_virtual_environment_file.pihole_user_data.id
     tailscale = proxmox_virtual_environment_file.tailscale_user_data.id

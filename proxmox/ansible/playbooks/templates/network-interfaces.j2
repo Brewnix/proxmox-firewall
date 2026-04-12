@@ -46,9 +46,8 @@ iface vmbr4 inet manual
     bridge-vlan-aware yes
     bridge-vids 10 20 30 40 50
 
-# Proxmox Host Management on VLAN 50 via Omada trunk
+# Proxmox Host Management on VLAN 50 via Omada trunk (VLAN id is on parent vmbr4 bridge-vids only)
 auto vmbr4.50
 iface vmbr4.50 inet static
     address 192.168.5.1/24
     # gateway will be updated to OPNsense later
-    bridge-vids 50

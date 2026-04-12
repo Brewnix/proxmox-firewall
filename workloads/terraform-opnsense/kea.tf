@@ -12,15 +12,15 @@ resource "opnsense_kea_subnet" "kea_sn_192_168_1_0_24" {
   match_client_id = true
   auto_collect    = true
   routers         = ["192.168.1.1"]
-  dns_servers     = ["192.168.1.1"]
+  dns_servers     = ["192.168.5.2", "192.168.1.1"] # Pi-hole then OPNsense (failover)
   domain_search = [
     "tn.fyberlabs.com",
     "fyberlabs.com",
   ]
-  domain_name = "tn.fyberlabs.com"
-  ntp_servers   = ["192.168.1.1"]
-  time_servers  = ["192.168.1.1"]
-  description   = "Main LAN Network"
+  domain_name  = "tn.fyberlabs.com"
+  ntp_servers  = ["192.168.1.1"]
+  time_servers = ["192.168.1.1"]
+  description  = "Main LAN Network"
 }
 
 resource "opnsense_kea_subnet" "kea_sn_192_168_2_0_24" {
@@ -31,15 +31,16 @@ resource "opnsense_kea_subnet" "kea_sn_192_168_2_0_24" {
   match_client_id = true
   auto_collect    = true
   routers         = ["192.168.2.1"]
-  dns_servers     = ["192.168.2.1"]
+  dns_servers     = ["192.168.5.2", "192.168.2.1"]
   domain_search = [
+    "cam.tn.fyberlabs.com",
     "tn.fyberlabs.com",
     "fyberlabs.com",
   ]
-  domain_name = "cam.tn.fyberlabs.com"
-  ntp_servers   = ["192.168.2.1"]
-  time_servers  = ["192.168.2.1"]
-  description   = "Camera Network"
+  domain_name  = "cam.tn.fyberlabs.com"
+  ntp_servers  = ["192.168.2.1"]
+  time_servers = ["192.168.2.1"]
+  description  = "Camera Network"
 }
 
 resource "opnsense_kea_subnet" "kea_sn_192_168_3_0_24" {
@@ -50,15 +51,16 @@ resource "opnsense_kea_subnet" "kea_sn_192_168_3_0_24" {
   match_client_id = true
   auto_collect    = true
   routers         = ["192.168.3.1"]
-  dns_servers     = ["192.168.3.1"]
+  dns_servers     = ["192.168.5.2", "192.168.3.1"]
   domain_search = [
+    "iot.tn.fyberlabs.com",
     "tn.fyberlabs.com",
     "fyberlabs.com",
   ]
-  domain_name = "iot.tn.fyberlabs.com"
-  ntp_servers   = ["192.168.3.1"]
-  time_servers  = ["192.168.3.1"]
-  description   = "IoT Network"
+  domain_name  = "iot.tn.fyberlabs.com"
+  ntp_servers  = ["192.168.3.1"]
+  time_servers = ["192.168.3.1"]
+  description  = "IoT Network"
 }
 
 resource "opnsense_kea_subnet" "kea_sn_192_168_4_0_24" {
@@ -69,7 +71,7 @@ resource "opnsense_kea_subnet" "kea_sn_192_168_4_0_24" {
   match_client_id = true
   auto_collect    = true
   routers         = ["192.168.4.1"]
-  dns_servers     = ["192.168.4.1"]
+  dns_servers     = ["192.168.5.2", "192.168.4.1"] # guest: use public resolvers instead if you want no filtering
   domain_search   = []
   ntp_servers     = ["192.168.4.1"]
   time_servers    = ["192.168.4.1"]
@@ -77,6 +79,9 @@ resource "opnsense_kea_subnet" "kea_sn_192_168_4_0_24" {
 }
 
 resource "opnsense_kea_subnet" "kea_sn_192_168_5_0_24" {
+  # Pool is for occasional mgmt-segment clients; infra (Pi-hole .2, Omada .20, etc.) is static.
+  # Omada APs/controllers usually get addresses on this VLAN via trunk — no need to disable DHCP
+  # here unless you truly never want dynamic leases on 50 (then shrink/remove pool in GUI/API).
   subnet = "192.168.5.0/24"
   pools = [
     "192.168.5.50-192.168.5.250",
@@ -84,15 +89,16 @@ resource "opnsense_kea_subnet" "kea_sn_192_168_5_0_24" {
   match_client_id = true
   auto_collect    = true
   routers         = ["192.168.5.1"]
-  dns_servers     = ["192.168.5.1"]
+  dns_servers     = ["192.168.5.2", "192.168.5.1"]
   domain_search = [
+    "mgmt.tn.fyberlabs.com",
     "tn.fyberlabs.com",
     "fyberlabs.com",
   ]
-  domain_name = "mgmt.tn.fyberlabs.com"
-  ntp_servers   = ["192.168.5.1"]
-  time_servers  = ["192.168.5.1"]
-  description   = "Management Network"
+  domain_name  = "mgmt.tn.fyberlabs.com"
+  ntp_servers  = ["192.168.5.1"]
+  time_servers = ["192.168.5.1"]
+  description  = "Management Network"
 }
 
 resource "opnsense_kea_subnet" "kea_sn_192_168_6_0_24" {
@@ -103,15 +109,16 @@ resource "opnsense_kea_subnet" "kea_sn_192_168_6_0_24" {
   match_client_id = true
   auto_collect    = true
   routers         = ["192.168.6.1"]
-  dns_servers     = ["192.168.6.1"]
+  dns_servers     = ["192.168.5.2", "192.168.6.1"]
   domain_search = [
+    "nodes.tn.fyberlabs.com",
     "tn.fyberlabs.com",
     "fyberlabs.com",
   ]
-  domain_name = "nodes.tn.fyberlabs.com"
-  ntp_servers   = ["192.168.6.1"]
-  time_servers  = ["192.168.6.1"]
-  description   = "K3S Nodes Network"
+  domain_name  = "nodes.tn.fyberlabs.com"
+  ntp_servers  = ["192.168.6.1"]
+  time_servers = ["192.168.6.1"]
+  description  = "K3S Nodes Network"
 }
 
 resource "opnsense_kea_subnet" "kea_sn_192_168_7_0_24" {
@@ -122,15 +129,17 @@ resource "opnsense_kea_subnet" "kea_sn_192_168_7_0_24" {
   match_client_id = true
   auto_collect    = true
   routers         = ["192.168.7.1"]
-  dns_servers     = ["192.168.7.1"]
+  dns_servers     = ["192.168.5.2", "192.168.7.1"]
   domain_search = [
+    "vm.tn.fyberlabs.com",
+    "nodes.tn.fyberlabs.com",
     "tn.fyberlabs.com",
     "fyberlabs.com",
   ]
-  domain_name = "vm.tn.fyberlabs.com"
-  ntp_servers   = ["192.168.7.1"]
-  time_servers  = ["192.168.7.1"]
-  description   = "K3S VMs Network"
+  domain_name  = "vm.tn.fyberlabs.com"
+  ntp_servers  = ["192.168.7.1"]
+  time_servers = ["192.168.7.1"]
+  description  = "K3S VMs Network"
 }
 
 # =============================================================================

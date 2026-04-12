@@ -9,10 +9,10 @@ resource "proxmox_virtual_environment_file" "pihole_user_data" {
   source_raw {
     file_name = "pihole.yaml"
     data = templatefile("${path.module}/cloud-init/pihole.yaml.tftpl", {
-      ssh_public_key        = var.ssh_public_key
-      pihole_lxc_ipv4       = var.pihole_lxc_ipv4
-      pihole_lxc_gateway    = var.pihole_lxc_gateway
-      pihole_admin_password = var.pihole_admin_password != "" ? var.pihole_admin_password : "brewnix123"
+      ssh_public_key            = var.ssh_public_key
+      pihole_lxc_ipv4           = var.pihole_lxc_ipv4
+      pihole_lxc_gateway        = var.pihole_lxc_gateway
+      pihole_admin_password_b64 = base64encode(var.pihole_admin_password != "" ? var.pihole_admin_password : "brewnix123")
     })
   }
 }
@@ -123,7 +123,8 @@ resource "proxmox_virtual_environment_vm" "opnsense" {
   # `ignore_changes` avoids apply fighting that block; remove a stray seed CD in the UI if you do not want it.
   #
   # Linux guests in this stack are **LXCs** (Pi-hole, Tailscale, Omada): Terraform uploads cloud-init snippets
-  # only; it does **not** attach `cicustom` / user-data to those CTs — use `pct set …` or the UI (see README).
+  # only; it does **not** attach them to CTs. After apply, run Ansible
+  # workloads/ansible/playbooks/lxc-apply-cloud-init-snippets.yml or scripts/attach_lxc_cloud_init_snippets.sh (see README).
   lifecycle {
     ignore_changes = [initialization]
   }
@@ -151,6 +152,9 @@ resource "proxmox_virtual_environment_container" "pihole" {
     vm_id = var.lxc_template_vmid
   }
 
+  # Pi-hole installer and FTL binding :53 are unreliable in unprivileged CTs; template default is often unprivileged.
+  unprivileged = false
+
   cpu {
     cores = 2
   }
@@ -165,8 +169,10 @@ resource "proxmox_virtual_environment_container" "pihole" {
   }
 
   network_interface {
-    name   = "eth0"
-    bridge = "vmbr4"
+    name    = "eth0"
+    bridge  = var.lxc_bridge
+    # 0 = untagged (flat 192.168.0.x on native VLAN). Non-zero = 802.1Q tag (e.g. 50 for mgmt VLAN).
+    vlan_id = var.management_vlan_id == 0 ? null : var.management_vlan_id
   }
 
   # Recommended for Pi-hole/dnsmasq in unprivileged or strict profiles; safe on privileged CTs too.
@@ -176,6 +182,10 @@ resource "proxmox_virtual_environment_container" "pihole" {
 
   initialization {
     hostname = "pihole"
+
+    dns {
+      servers = var.lxc_dns_servers
+    }
 
     ip_config {
       ipv4 {
@@ -211,8 +221,9 @@ resource "proxmox_virtual_environment_container" "tailscale" {
   }
 
   network_interface {
-    name   = "eth0"
-    bridge = "vmbr4"
+    name    = "eth0"
+    bridge  = var.lxc_bridge
+    vlan_id = var.management_vlan_id == 0 ? null : var.management_vlan_id
   }
 
   # Tailscale also reads TS_AUTHKEY from the environment (useful for manual pct exec / debugging).
@@ -221,10 +232,14 @@ resource "proxmox_virtual_environment_container" "tailscale" {
   initialization {
     hostname = "tailscale"
 
+    dns {
+      servers = var.lxc_dns_servers
+    }
+
     ip_config {
       ipv4 {
-        address = "192.168.5.10/24"
-        gateway = "192.168.5.1"
+        address = var.tailscale_lxc_ipv4
+        gateway = var.tailscale_lxc_gateway
       }
     }
   }
@@ -255,17 +270,22 @@ resource "proxmox_virtual_environment_container" "omada" {
   }
 
   network_interface {
-    name   = "eth0"
-    bridge = "vmbr4"
+    name    = "eth0"
+    bridge  = var.lxc_bridge
+    vlan_id = var.management_vlan_id == 0 ? null : var.management_vlan_id
   }
 
   initialization {
     hostname = "omada"
 
+    dns {
+      servers = var.lxc_dns_servers
+    }
+
     ip_config {
       ipv4 {
-        address = "192.168.5.20/24"
-        gateway = "192.168.5.1"
+        address = var.omada_lxc_ipv4
+        gateway = var.omada_lxc_gateway
       }
     }
   }

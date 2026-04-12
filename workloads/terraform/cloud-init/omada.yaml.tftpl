@@ -4,6 +4,14 @@
 hostname: omada
 fqdn: omada.brewnix.lan
 
+bootcmd:
+  - [ ssh-keygen, -A ]
+
+# Match default_user to the only cloud-config user (Debian cloud.cfg defaults to debian).
+system_info:
+  default_user:
+    name: ansible
+
 users:
   - name: ansible
     sudo: ALL=(ALL) NOPASSWD:ALL

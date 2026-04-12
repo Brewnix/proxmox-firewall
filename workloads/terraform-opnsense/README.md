@@ -18,6 +18,13 @@ terraform init
 terraform plan
 ```
 
+## Pi-hole (192.168.5.2) + Kea DNS
+
+- **[`kea.tf`](kea.tf)** sets **`dns_servers`** to **Pi-hole first** (`192.168.5.2`), then the **subnet gateway** (OPNsense Unbound) as fallback if Pi-hole is down.
+- **[`unbound_dns.tf`](unbound_dns.tf)** intentionally has **no** catch-all forward to Pi-hole: clients talk to Pi-hole directly; **Unbound** on OPNsense answers **local** names when Pi-hole forwards `tn.fyberlabs.com` / `lan` (see [`cloud-init/pihole.yaml.tftpl`](../terraform/cloud-init/pihole.yaml.tftpl) `dnsmasq.d` on the CT). If you previously imported **`opnsense_unbound_forward`** for “all → Pi-hole”, **`terraform apply`** will remove it — that is expected.
+- **Firewall:** allow **UDP/TCP 53** from internal VLANs to **`PiHole_DNS`** (`192.168.5.2`) — implement in the GUI or [`OpnSenseXML/`](../../OpnSenseXML/) rules; alias is in [`firewall_aliases.tf`](firewall_aliases.tf).
+- **VLAN 50 DHCP:** Kea still has a **pool** for occasional devices on the mgmt segment; **Pi-hole, Omada, Tailscale** stay on **static** reservations. APs/controllers usually do not need an address *from* the VLAN 50 pool (they get mgmt via trunk/SSID); the pool is optional — shrink or disable that subnet’s DHCP in the GUI if you truly want **static-only** on 50.
+
 ## Firewall aliases (import vs create)
 
 [`firewall_aliases.tf`](firewall_aliases.tf) lines up with **[`OpnSenseXML/ALIASES.xml`](../../OpnSenseXML/ALIASES.xml)** (networks, hosts, ports). You can add VLANs, Unbound, Kea, and filter rules in this module as you adopt them; **gateway groups / gateway objects** are still mostly GUI-only in the provider (see [Drift and gaps](#drift-and-gaps)).

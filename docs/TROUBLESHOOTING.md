@@ -219,6 +219,17 @@ echo 1 > /proc/sys/net/bridge/bridge-nf-call-iptables
    ansible-playbook deployment/ansible/playbooks/04_vm_templates.yml
    ```
 
+4. **Host firewall (UFW) blocks the API (`EOF` on HTTPS to `:8006`)** — If **`ufw`** is enabled on the **Proxmox node**, default rules often **deny** inbound **TCP 8006** from the LAN. **`dmesg`** shows **`[UFW BLOCK] ... DPT=8006`** from your workstation IP. **Terraform**, **curl**, and the **web UI** then fail or drop mid-connection. On the node:
+   ```bash
+   ufw status numbered
+   ufw allow from 192.168.0.0/24 to any port 8006 proto tcp comment 'Proxmox API from LAN'
+   ufw reload
+   # Also allow SSH from the same net if you lock the box down: port 22
+   ```
+   Adjust the source CIDR to your management network. Prefer **restrictive** rules, not `ufw allow 8006/tcp` from **anywhere**, if the host has WAN-facing interfaces.
+
+   **Still blocking?** (a) Confirm **`ufw reload`** ran after changes. (b) **`ufw status verbose`** — verify an **ALLOW** for **8006** is listed *and* matches **from** your client subnet. (c) Traffic arrives on **`vmbr2`** — try an interface-specific allow: **`ufw allow in on vmbr2 from 192.168.0.0/24 to any port 8006 proto tcp`**, then **`ufw reload`**. (d) Duplicate or mis-ordered rules — **`ufw status numbered`**, **`ufw delete <n>`** on stale DENY or wrong ALLOW, re-add. (e) From **console**, **`ufw disable`** briefly — if blocks stop, only UFW ordering/content is wrong (re-enable after fixing). (f) Client using **IPv6** — test **`curl -4`** or add IPv6 allow.
+
 ### VM Won't Start
 
 **Problem**: VMs fail to start
@@ -595,6 +606,77 @@ ip route show
 # Service status
 systemctl status pveproxy pvedaemon pve-cluster
 ```
+
+### LXC snippet playbook (Ansible) fails mid-run
+
+During **lab / nested-router** builds, OPNsense may not forward **public DNS** or **HTTPS** until **WAN** and **NAT** are correct. The playbook can still **push snippets** and apply **`write_files`** without running **`runcmd`** (Pi-hole **`curl`**, **`apt`**):
+
+```bash
+ansible-playbook workloads/ansible/playbooks/lxc-apply-cloud-init-snippets.yml \
+  -e lxc_skip_dns_preflight=true \
+  -e lxc_skip_cloud_init_install=true \
+  -e lxc_skip_cloud_init_final=true
+```
+
+Re-run **without** those **`-e`** flags when **WAN**, **DNS**, and **outbound HTTPS** work end-to-end from the CTs.
+
+**`lxc_skip_cloud_init_install=true`** only works if the **`cloud-init`** package is **already installed** in each LXC (e.g. baked into the template). Otherwise run **without** that flag once so **`apt`** can install **`cloud-init`** (needs working DNS to Debian mirrors).
+
+**No network and no `cloud-init` in the guest:** use **`-e lxc_seed_nocloud_only=true`** together with the other skips so the playbook **only writes** **`meta-data`** and **`user-data`** under **`/var/lib/cloud/seed/nocloud/`** — then install **`cloud-init`** when the CT can reach Debian mirrors and re-run the playbook without **`lxc_seed_nocloud_only`**.
+
+### LXC: `Destination Host Unreachable` to the default gateway (`ping 192.168.0.1`)
+
+**Symptoms:** Inside the CT, **`ping 192.168.0.1`** and **`ping 1.1.1.1`** return **Destination Host Unreachable** (often “From 192.168.0.x …”), not just DNS failure.
+
+**Meaning:** This is **layer 2 / switching / VLAN**, not **`resolv.conf`**. The stack cannot reach the **next hop** on the wire—usually **no ARP reply** from the gateway because the CT’s **veth is not on the same Ethernet broadcast domain** as **`192.168.0.1`**, or the **gateway IP is wrong** for that segment.
+
+**Check:**
+
+1. On **Proxmox** (host): **`ping 192.168.0.1`** — if the **host** reaches the router but the **CT** does not, fix the **CT’s bridge and VLAN** in the UI / Terraform (**`network_interface`**, **`vlan_id`**, **`vmbr`**).
+2. **VLAN mismatch:** If the CT has **`192.168.0.201/24`** but **`vlan_id`** (e.g. **50**) tags it onto a trunk where **192.168.0.0/24** is **not** that VLAN, the router will never answer ARP. For an **untagged** home LAN, the CT must be on the **native VLAN** of the bridge that faces the router (often **`vlan_id` unset / 0** — confirm in **`bpg/proxmox`** docs for your version).
+3. Inside the CT: **`ip neigh`** — **`192.168.0.1`** stuck **FAILED** / **INCOMPLETE** confirms neighbor discovery failure.
+4. **Cable / bridge:** Ensure the **physical NIC** backing **`vmbr`** actually goes to the same switch / port / VLAN as the ISP router’s LAN.
+
+DNS errors (**`Temporary failure in name resolution`**) are a **consequence** until L3 to the gateway works.
+
+### LXC: `dig @1.1.1.1` times out (even with `nameserver 1.1.1.1` in `resolv.conf`)
+
+If **`dig @1.1.1.1`** from inside the CT **times out** and **`curl https://deb.debian.org`** fails, the CT **has no usable path to the public internet** through its **default gateway** — this is **not** solved by editing **`resolv.conf`** again.
+
+Check in order:
+
+1. **`ping <default-gateway>`** from inside the CT (e.g. **`192.168.0.1`**) — must work for L3 to the router. If it fails, fix **bridge / VLAN / CT IP** on Proxmox.
+2. **Home router** — **client isolation**, **parental controls**, **“force ISP DNS”** / block **UDP/TCP 53** to **1.1.1.1** / **8.8.8.8**, or **no NAT** from LAN to WAN for those clients.
+3. **Proxmox host firewall** — **`iptables -L FORWARD -n -v`** / **nftables**: rules that **DROP** traffic from **vmbr** / **CT subnet** toward the WAN. **UFW** “routed” defaults vary; forwarding can be denied.
+4. Until fixed, run **`lxc-apply-cloud-init-snippets.yml`** with **`-e lxc_skip_dns_preflight=true`** (and usually skip **`cloud-init install`/`final`** until outbound works).
+
+### “Proxmox reaches the internet but LXCs still cannot resolve `deb.debian.org`” (even with `1.1.1.1`)
+
+The **Proxmox host** and **each LXC** have **separate** IP addresses and **default gateways**. Default **`workloads/terraform/main.tf`** puts service LXCs on **`192.168.5.0/24`** with gateway **`192.168.5.1`** (OPNsense). **All** traffic from the CT — including **UDP/TCP 53** to **`1.1.1.1`** — is routed **via `192.168.5.1`**. Changing **`/etc/resolv.conf`** (Ansible) only picks the **resolver address**; it does **not** remove OPNsense from the path. If OPNsense **blocks**, **redirects**, or **cannot reach** the internet for DNS, resolution fails.
+
+To use **only the ISP router** (`192.168.0.1`) for CT **gateway + DNS**, change **Terraform** so each LXC’s **IPv4 + gateway** live on that subnet (see **“Flat LAN bootstrap”** in **`workloads/terraform/README.md`**), then **`terraform apply`** and re-run the playbook.
+
+### LXC playbook: `Permission denied (publickey)` or wrong IP
+
+Ansible connects to **Proxmox** over **SSH** using **`proxmox/ansible/inventory/hosts.yaml`** (`ansible_host`, **`ansible_user`**). This error means the host was reached but **no SSH key matched** for that user — it is **not** a cloud-init or CT DNS problem.
+
+1. **DHCP changed the node IP** — update **`ansible_host`** to the current address (or use a **DHCP reservation** / **static IP** on the router so the address stops moving).
+2. **User `ansible` must accept your key** — on the Proxmox node, `~ansible/.ssh/authorized_keys` must include the public key for the identity you use from your workstation. From the machine that runs Ansible: **`ssh-copy-id ansible@<proxmox-ip>`** (after creating the `ansible` user and sudo access if you follow that pattern), **or** set **`ansible_user: root`** in inventory if you only use **root** + key (less ideal but common on lab nodes).
+
+3. **`ssh fw` works but Ansible says Permission denied** — Ansible connects to **`ansible@<ansible_host>`** (the **IP**). Your **`~/.ssh/config`** may only set **`IdentityFile`** under **`Host fw`** or an old IP alias, not under **`Host <current-ip>`**, so the SSH client falls back to other keys. Fix: add a **`Host <proxmox-ip>`** block with the same **`IdentityFile`**, **or** set **`ansible_ssh_private_key_file`** in **`proxmox/ansible/inventory/host_vars/pve-firewall.yml`** (see the example there matching **`workloads/terraform/providers.tf`**).
+
+Confirm with **`ssh -v ansible@<ip>`** (or **`root@<ip>`**) before re-running the playbook.
+
+### Omada AP / OPT2: no internet
+
+**Symptoms:** Wi-Fi clients or the **Omada** controller/AP segment on **OPT2** (or a **Wi-Fi VLAN**) cannot reach the internet even when **LAN** can.
+
+**Check on OPNsense:**
+
+1. **Outbound NAT** — **Firewall → NAT → Outbound**: the **source** for OPT2’s subnet must be **NAT’d to WAN**. Default “automatic” rules sometimes only cover **LAN**; use **hybrid** or **manual** and add a rule for **OPT2 net → WAN** if needed.
+2. **Firewall rules** — **Firewall → Rules → OPT2** (or the interface where APs sit): **allow IPv4** from that net to **WAN** (or **any**), **above** any **block** or **reject** rules. Same for **UDP/TCP 53** if clients use **OPNsense** or **Pi-hole** for DNS.
+3. **Gateways / DHCP** — Clients must get a **default gateway** and **DNS** that match your design (often **OPNsense’s address on that segment**, not an upstream router, unless you intentionally bypass the firewall).
+4. **Nested lab** — If **OPNsense WAN** and **LAN** are both on the **same upstream LAN** (e.g. both DHCP from the **original router**), verify **no IP/subnet overlap** between **WAN**, **LAN**, and **OPT2**, and that you are not expecting **hairpin** or **asymmetric** paths without explicit rules.
 
 ### Community Support
 

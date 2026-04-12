@@ -8,7 +8,7 @@ This repository uses **three separate Terraform state domains** (never mixed in 
 | Guests + snippets | [workloads/terraform](../workloads/terraform/) | `bpg/proxmox` | After host bridges/templates; Proxmox API up |
 | OPNsense policy | [workloads/terraform-opnsense](../workloads/terraform-opnsense/) | `browningluke/opnsense` | After OPNsense install + API keys |
 
-Ansible: [proxmox/ansible](../proxmox/ansible/) (host, golden LXC, ISO sync) then [workloads/ansible](../workloads/ansible/) (LXC cloud-init apply, future guest playbooks).
+Ansible: [proxmox/ansible](../proxmox/ansible/) (host, golden LXC, ISO sync) then [workloads/ansible](../workloads/ansible/) (LXC snippet apply, future guest playbooks).
 
 ## CI and secrets
 

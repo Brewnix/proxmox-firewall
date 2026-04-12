@@ -9,7 +9,7 @@ terraform {
 }
 
 provider "proxmox" {
-  endpoint  = "https://192.168.0.86:8006/" # your N305 IP
+  endpoint  = "https://192.168.0.102:8006/" # your N305 IP
   api_token = var.proxmox_api_token        # format: "user@pam!tokenid=secretvalue"
   insecure  = true                         # set false once you have proper cert
 

@@ -1,5 +1,22 @@
 proxmox_nag_remove: true
 
+# UFW (proxmox-host-base.yml): primary LAN bridge + source CIDR for SSH/8006 (dmesg IN=vmbr2 for flat 192.168.0.x).
+proxmox_ufw_lan_interface: vmbr2
+proxmox_ufw_lan_cidr: 192.168.0.0/24
+
+# Flat LAN (192.168.0.x / gw 192.168.0.1): put a working resolver first. Many ISP routers do not answer
+# DNS on 192.168.0.1:53 from every client — dig @192.168.0.1 then times out. Use 1.1.1.1 (or 8.8.8.8) for
+# bootstrap; drop it later if policy forbids. If your ISP blocks public DNS, fix the router or use only .0.1.
+lxc_resolv_nameservers:
+  - "1.1.1.1"
+  - "192.168.0.1"
+
+# Private key Ansible uses for SSH to this host. Required when your default ~/.ssh/id_* is not the key
+# authorized for ansible@ (e.g. you use id_ed25519_home for Proxmox, matching ssh Host fw and Terraform
+# providers.tf ssh { private_key = file("~/.ssh/id_ed25519_home") }). Without this, `ssh fw` works but
+# `ansible@192.168.0.102` may try other keys and fail with Permission denied (publickey).
+ansible_ssh_private_key_file: ~/.ssh/id_ed25519_home
+
 # Proxmox node name (Datacenter → node name, `hostname` on the host). Used for /etc/pve/nodes/<name>/...
 # Must match terraform `proxmox_node_name` (e.g. fw).
 pve_node_name: fw

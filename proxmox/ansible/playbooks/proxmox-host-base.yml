@@ -186,19 +186,26 @@
       community.general.ufw:
         state: enabled
 
-    - name: Allow SSH from Main Network (VLAN 10)
+    # Bind allows to the LAN bridge (IN=vmbr2 in dmesg). Rules without "in on vmbr2" may not match bridged INPUT.
+    - name: Allow SSH from Main Network (LAN bridge)
       community.general.ufw:
         rule: allow
-        port: ssh
-        from: "192.168.0.0/23"   # ← Adjust if your management traffic uses a different subnet
+        direction: in
+        interface: "{{ proxmox_ufw_lan_interface | default('vmbr2') }}"
+        to_port: "22"
+        from_ip: "{{ proxmox_ufw_lan_cidr | default('192.168.0.0/24') }}"
         proto: tcp
+        comment: SSH from LAN
 
-    - name: Allow Proxmox Web UI (port 8006) from Main Network only
+    - name: Allow Proxmox Web UI (port 8006) from Main Network (LAN bridge)
       community.general.ufw:
         rule: allow
-        port: 8006
-        from: "192.168.0.0/23"
+        direction: in
+        interface: "{{ proxmox_ufw_lan_interface | default('vmbr2') }}"
+        to_port: "8006"
+        from_ip: "{{ proxmox_ufw_lan_cidr | default('192.168.0.0/24') }}"
         proto: tcp
+        comment: Proxmox API from LAN
 
     # === Create Golden Debian 12 Cloud-Init Template ===
     - name: Ensure cloud-init image directory exists

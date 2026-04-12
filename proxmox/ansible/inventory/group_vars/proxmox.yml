@@ -1,0 +1,7 @@
+# Playbooks that write CT resolv.conf (e.g. workloads/ansible/playbooks/lxc-apply-cloud-init-snippets.yml)
+# use this unless overridden in host_vars or with -e.
+# Match workloads/terraform `lxc_dns_servers` for your layout:
+#   - ["192.168.5.1"] — VLAN50 / mgmt; DNS via OPNsense Unbound
+#   - ["192.168.0.1"] — flat LAN; CT gw is ISP router (same subnet)
+lxc_resolv_nameservers:
+  - "192.168.5.1"

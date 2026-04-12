@@ -6,14 +6,11 @@
 # =============================================================================
 # opnsense_unbound_forward
 # =============================================================================
-
-resource "opnsense_unbound_forward" "fwd_all_192_168_5_2" {
-  enabled     = true
-  domain      = ""
-  server_ip   = "192.168.5.2"
-  server_port = 53
-  verify_cn   = ""
-}
+# Do not add a catch-all forward to Pi-hole here when DHCP hands clients
+# 192.168.5.2 directly (see kea.tf). Clients → Pi-hole → upstream; Pi-hole
+# conditional forwards internal zones to OPNsense (cloud-init dnsmasq on the CT).
+# Unbound on OPNsense then serves local overrides / recursion for the router and
+# for any client still using the gateway as secondary DNS.
 
 # =============================================================================
 # opnsense_unbound_host_alias

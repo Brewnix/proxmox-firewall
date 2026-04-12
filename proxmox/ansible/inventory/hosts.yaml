@@ -1,9 +1,12 @@
+# ansible_host: set to the Proxmox node’s reachable IP (update when DHCP changes it).
+# ansible_user: must exist on the node with your SSH public key in ~/.ssh/authorized_keys
+#   (or use root + key if that is how you SSH). Permission denied (publickey) = fix SSH, not the playbook.
 all:
   children:
     proxmox:
       hosts:
         pve-firewall:
-          ansible_host: 192.168.0.86
+          ansible_host: 192.168.0.102
           ansible_user: ansible
           ansible_become: true
           ansible_become_method: sudo
