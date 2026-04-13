@@ -42,11 +42,11 @@ auto vmbr3.50
 iface vmbr3.50 inet static
     address 192.168.5.1/24
 
-# 5. Camera Switch (nic4) — cameras (20) + management (50) only
+# 5. Camera Switch (nic4) — cameras (20) + IoT (30) + management (50)
 auto vmbr4
 iface vmbr4 inet manual
     bridge-ports {{ camera_switch_port }}
     bridge-stp off
     bridge-fd 0
     bridge-vlan-aware yes
-    bridge-vids 20 50
+    bridge-vids 20 30 50

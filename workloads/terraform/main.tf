@@ -113,9 +113,9 @@ resource "proxmox_virtual_environment_vm" "opnsense" {
   }
 
   network_device {
-    bridge = "vmbr4" # Camera Switch (nic4) — cameras + mgmt only
+    bridge = "vmbr4" # Camera Switch (nic4) — cameras + IoT + mgmt
     model  = "virtio"
-    trunks = "20;50"
+    trunks = "20;30;50"
   }
 
   # Proxmox may still show a cloud-init / seed drive on this VM (provider `initialization` or the UI), but
