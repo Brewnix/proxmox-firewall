@@ -248,23 +248,46 @@
         creates: /etc/pve/nodes/{{ pve_node_name | default(inventory_hostname) }}/qemu-server/9000.conf
 
     - name: Import cloud image disk to the template VM
-      ansible.builtin.command: >
-        qm importdisk 9000 /var/lib/vz/template/iso/debian-12-genericcloud-amd64.qcow2 local-lvm --format qcow2
+      ansible.builtin.shell: |
+        cfg="/etc/pve/nodes/{{ pve_node_name | default(inventory_hostname) }}/qemu-server/9000.conf"
+        # Skip if scsi0 is already wired up in the VM config
+        if grep -q '^scsi0:' "$cfg" 2>/dev/null; then
+          echo "already_imported"
+          exit 0
+        fi
+        qm importdisk 9000 /var/lib/vz/template/iso/debian-12-genericcloud-amd64.qcow2 local-lvm
       args:
-        creates: /var/lib/vz/images/9000/vm-9000-disk-0.qcow2
+        executable: /bin/bash
+      register: qm_import_9000
+      changed_when: "'already_imported' not in qm_import_9000.stdout"
 
     - name: Configure the template VM disk and Cloud-Init
-      ansible.builtin.command: >
-        qm set 9000 
-        --scsi0 local-lvm:vm-9000-disk-0,discard=on,ssd=1 
-        --ide2 local-lvm:cloudinit 
-        --boot c --bootdisk scsi0 
-        --serial0 socket --vga serial0 
-        --agent enabled=1 
-        --ciuser ansible 
-        --sshkeys /home/ansible/.ssh/authorized_keys
+      ansible.builtin.shell: |
+        cfg="/etc/pve/nodes/{{ pve_node_name | default(inventory_hostname) }}/qemu-server/9000.conf"
+        # Skip if already fully configured (scsi0 + ide2 + serial0 all present)
+        if grep -q '^scsi0:' "$cfg" 2>/dev/null && grep -q '^ide2:' "$cfg" 2>/dev/null && grep -q '^serial0:' "$cfg" 2>/dev/null; then
+          echo "already_configured"
+          exit 0
+        fi
+        # importdisk registers the volume as vm-9000-disk-0; after qm template it becomes base-9000-disk-0.
+        # Use whichever exists.
+        if lvs pve/base-9000-disk-0 &>/dev/null; then
+          disk_ref="local-lvm:base-9000-disk-0"
+        else
+          disk_ref="local-lvm:vm-9000-disk-0"
+        fi
+        qm set 9000 \
+          --scsi0 "${disk_ref},discard=on,ssd=1" \
+          --ide2 local-lvm:cloudinit \
+          --boot c --bootdisk scsi0 \
+          --serial0 socket --vga serial0 \
+          --agent enabled=1 \
+          --ciuser ansible \
+          --sshkeys /home/ansible/.ssh/authorized_keys
       args:
-        creates: /var/lib/vz/images/9000/vm-9000-disk-0.qcow2   # rough idempotency
+        executable: /bin/bash
+      register: qm_cfg_9000
+      changed_when: "'already_configured' not in qm_cfg_9000.stdout"
 
     - name: Convert VM to template
       ansible.builtin.shell: |
