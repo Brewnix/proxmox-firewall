@@ -33,9 +33,9 @@ See **[docs/ISO_SOURCES.md](../docs/ISO_SOURCES.md)** for flags and legacy wrapp
    If Ansible still reports **no hosts matched**, pass **`-i proxmox/ansible/inventory/hosts.yaml`** or edit **`proxmox/ansible/inventory/hosts.yaml`** so **`ansible_host`** reaches your node (e.g. **`fw`**).
 2. **On the Proxmox node as root** — [`scripts/attach_lxc_cloud_init_snippets.sh`](scripts/attach_lxc_cloud_init_snippets.sh) (**`pct push`** to **`/var/lib/cloud/seed/nocloud/`** + **`pct exec … cloud-init …`**). No reboot required if **`cloud-init modules --mode=final`** completes; check **`/var/log/cloud-init-output.log`** in the CT if not.
 
-### Management VLAN on `vmbr4` (Pi-hole / Tailscale / Omada)
+### Management VLAN on `vmbr3` (Pi-hole / Tailscale / Omada)
 
-If the Proxmox host uses a **VLAN subinterface** for mgmt (e.g. **`vmbr4.50`** with **192.168.5.1**), the **LXC NIC must use the same 802.1Q tag** (`vlan_id = 50`). Otherwise the CT stays on the trunk’s **native VLAN**, gets no path to **192.168.5.1**, and pings from the host show **Destination Host Unreachable**. Terraform sets **`management_vlan_id`** (default **50**) on those LXCs — align it with your bridge. Flat **untagged** mgmt on `vmbr4` only: remove **`vlan_id`** from **`network_interface`** in **`main.tf`** or fork the pattern.
+If the Proxmox host uses a **VLAN subinterface** for mgmt (e.g. **`vmbr3.50`** with **192.168.5.1**), the **LXC NIC must use the same 802.1Q tag** (`vlan_id = 50`). Otherwise the CT stays on the trunk’s **native VLAN**, gets no path to **192.168.5.1**, and pings from the host show **Destination Host Unreachable**. Terraform sets **`management_vlan_id`** (default **50**) on those LXCs — align it with your bridge. Flat **untagged** mgmt on `vmbr3` only: remove **`vlan_id`** from **`network_interface`** in **`main.tf`** or fork the pattern.
 
 ### DNS inside service LXCs (201–203)
 
@@ -48,7 +48,7 @@ If the Proxmox host uses a **VLAN subinterface** for mgmt (e.g. **`vmbr4.50`** w
 To put service LXCs on the **same /24 as the home router** (e.g. **`192.168.0.0/24`**) so the default gateway is **`192.168.0.1`** (not OPNsense), set in **`terraform.tfvars`** (adjust host IPs to avoid DHCP clashes; align **`lxc_bridge`** and **`management_vlan_id`** with physical layout — **wrong bridge** gives **`Destination Host Unreachable`** to the gateway even when IP/VLAN look correct):
 
 ```hcl
-# Same bridge as the Proxmox host’s 192.168.0.x NIC (often vmbr2 = main LAN). vmbr4 is the Omada trunk in this repo.
+# Same bridge as the Proxmox host’s 192.168.0.x NIC (often vmbr2 = main LAN). vmbr3 is the Omada trunk in this repo.
 lxc_bridge            = "vmbr2"
 # Untagged — must match how the switch/router uses VLANs (0 = no 802.1Q tag on this NIC).
 management_vlan_id    = 0
@@ -144,7 +144,7 @@ Unattended install **requires** `/etc/pihole/setupVars.conf` **before** `bash �
 
 **Web UI login:** use **`pihole_admin_password`** from **`terraform.tfvars`** (or **`brewnix123`** if unset). **Proxmox serial/console** to the LXC is **Linux**, not Pi-hole — log in as **`ansible`** (SSH key) or **`root`** if you set a password; the Pi-hole password only applies to the **/admin** web UI (e.g. `http://192.168.5.2/admin`).
 
-**SSH local port forward** (e.g. `ssh -L 8443:192.168.5.2:443 fw`): the host **`fw` must reach** `192.168.5.2`. If **`fw` is Proxmox** and the node has **no IP on VLAN 50** (`vmbr4`), the tunnel target often **fails** — add a **management IP on `vmbr4`** (e.g. `192.168.5.254/24`), **SSH to a host on that subnet** (e.g. OPNsense `192.168.5.1` if SSH is enabled), or tunnel to **port 80** (`…:192.168.5.2:80`) if the UI is HTTP-only. From `fw`, test: **`curl -sI http://192.168.5.2/admin`**.
+**SSH local port forward** (e.g. `ssh -L 8443:192.168.5.2:443 fw`): the host **`fw` must reach** `192.168.5.2`. If **`fw` is Proxmox** and the node has **no IP on VLAN 50** (`vmbr3`), the tunnel target often **fails** — add a **management IP on `vmbr3`** (e.g. `192.168.5.254/24`), **SSH to a host on that subnet** (e.g. OPNsense `192.168.5.1` if SSH is enabled), or tunnel to **port 80** (`…:192.168.5.2:80`) if the UI is HTTP-only. From `fw`, test: **`curl -sI http://192.168.5.2/admin`**.
 
 **Recovery — `curl` to `:80`/`:443` connection refused, `systemctl status pihole-FTL` not found:** Pi-hole **never finished installing** (common if cloud-init ran **before** the mgmt NIC/VLAN could reach the internet, or the unattended script failed). On **`fw`**:
 

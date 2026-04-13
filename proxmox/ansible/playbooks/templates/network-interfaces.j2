@@ -28,26 +28,25 @@ iface vmbr2 inet dhcp
     bridge-fd 0
     bridge-vlan-aware no
 
-# 4. Camera Switch (nic4)
+# 4. Omada AP trunk (nic3) — all VLANs the APs need
 auto vmbr3
 iface vmbr3 inet manual
-    bridge-ports {{ camera_switch_port }}
-    bridge-stp off
-    bridge-fd 0
-    bridge-vlan-aware yes
-    bridge-vids 20 50
-
-# 5. Full Trunk to Omada AP (nic3)
-auto vmbr4
-iface vmbr4 inet manual
     bridge-ports {{ omada_ap_port }}
     bridge-stp off
     bridge-fd 0
     bridge-vlan-aware yes
     bridge-vids 10 20 30 40 50
 
-# Proxmox Host Management on VLAN 50 via Omada trunk (VLAN id is on parent vmbr4 bridge-vids only)
-auto vmbr4.50
-iface vmbr4.50 inet static
+# Proxmox Host Management on VLAN 50 via Omada trunk
+auto vmbr3.50
+iface vmbr3.50 inet static
     address 192.168.5.1/24
-    # gateway will be updated to OPNsense later
+
+# 5. Camera Switch (nic4) — cameras (20) + management (50) only
+auto vmbr4
+iface vmbr4 inet manual
+    bridge-ports {{ camera_switch_port }}
+    bridge-stp off
+    bridge-fd 0
+    bridge-vlan-aware yes
+    bridge-vids 20 50

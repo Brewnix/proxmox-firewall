@@ -107,15 +107,15 @@ resource "proxmox_virtual_environment_vm" "opnsense" {
   }
 
   network_device {
-    bridge = "vmbr3" # Camera Switch trunk
+    bridge = "vmbr3" # Omada AP trunk (nic3) — all WiFi VLANs
     model  = "virtio"
-    trunks = "20;50"
+    trunks = "10;20;30;40;50"
   }
 
   network_device {
-    bridge = "vmbr4" # Full Omada trunk
+    bridge = "vmbr4" # Camera Switch (nic4) — cameras + mgmt only
     model  = "virtio"
-    trunks = "10;20;30;40;50"
+    trunks = "20;50"
   }
 
   # Proxmox may still show a cloud-init / seed drive on this VM (provider `initialization` or the UI), but
@@ -207,6 +207,9 @@ resource "proxmox_virtual_environment_container" "tailscale" {
     vm_id = var.lxc_template_vmid
   }
 
+  # tailscaled needs /dev/net/tun; unprivileged CTs often fail to start the daemon or join. Match common Proxmox + Tailscale guidance.
+  unprivileged = false
+
   cpu {
     cores = 1
   }
@@ -225,6 +228,14 @@ resource "proxmox_virtual_environment_container" "tailscale" {
     bridge  = var.lxc_bridge
     vlan_id = var.management_vlan_id == 0 ? null : var.management_vlan_id
   }
+
+  features {
+    nesting = true
+  }
+
+  # TUN device for tailscaled is configured via Ansible in lxc-apply-cloud-init-snippets.yml
+  # (lxc.cgroup2.devices.allow + lxc.mount.entry). See:
+  # https://forum.proxmox.com/threads/how-to-enable-tun-tap-in-a-lxc-container.25339/
 
   # Tailscale also reads TS_AUTHKEY from the environment (useful for manual pct exec / debugging).
   environment_variables = var.tailscale_auth_key != "" ? { TS_AUTHKEY = var.tailscale_auth_key } : {}
@@ -247,6 +258,9 @@ resource "proxmox_virtual_environment_container" "tailscale" {
 
 # =============================================
 # Omada Controller LXC
+# Omada discovers EAPs via L2 broadcast/multicast. It needs an interface on every
+# bridge that carries AP traffic so it shares the same broadcast domain. eth0 is the
+# management/default-route NIC; eth1/eth2 are trunk legs for AP discovery only.
 # =============================================
 resource "proxmox_virtual_environment_container" "omada" {
   node_name = var.proxmox_node_name
@@ -269,10 +283,23 @@ resource "proxmox_virtual_environment_container" "omada" {
     size         = 16
   }
 
+  # eth0 — management LAN (default route, Omada web UI)
   network_interface {
     name    = "eth0"
     bridge  = var.lxc_bridge
     vlan_id = var.management_vlan_id == 0 ? null : var.management_vlan_id
+  }
+
+  # eth1 — Omada AP trunk (vmbr3 / nic3) for EAP L2 discovery
+  network_interface {
+    name   = "eth1"
+    bridge = "vmbr3"
+  }
+
+  # eth2 — Camera Switch (vmbr4 / nic4) for PoE-switch AP discovery
+  network_interface {
+    name   = "eth2"
+    bridge = "vmbr4"
   }
 
   initialization {

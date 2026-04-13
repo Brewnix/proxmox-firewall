@@ -260,10 +260,36 @@
             rm -rf /var/lib/cloud/instance
           fi
           cloud-init clean --logs
-          '
+          ' 2>&1 || echo "cloud-init clean failed or timed out for vmid {{ item.vmid }} (continuing)"
       loop: "{{ lxc_cloud_init_snippets }}"
+      # Omada (heavy container) can cause become timeout on Proxmox host; ignore so we can continue with init/config.
+      ignore_errors: true
       failed_when: false
       changed_when: true
+
+    - name: Brief pause before cloud-init init (helps heavy Omada CT)
+      when:
+        - not (lxc_seed_nocloud_only | default(false) | bool)
+        - item.vmid == 203
+      ansible.builtin.pause:
+        seconds: 8
+      loop: "{{ lxc_cloud_init_snippets }}"
+      loop_control:
+        label: "vmid={{ item.vmid }}"
+
+    - name: Enable TUN device for Tailscale LXC (cgroup2 + mount for /dev/net/tun)
+      when:
+        - not (lxc_seed_nocloud_only | default(false) | bool)
+        - item.vmid == 202
+      ansible.builtin.lineinfile:
+        path: /etc/pve/lxc/{{ item.vmid }}.conf
+        line: "{{ item.line }}"
+        create: true
+      loop:
+        - { vmid: 202, line: "lxc.cgroup2.devices.allow: c 10:200 rwm" }
+        - { vmid: 202, line: "lxc.mount.entry: /dev/net dev/net none bind,create=dir" }
+      loop_control:
+        label: "vmid={{ item.vmid }} line={{ item.line }}"
 
     # Single-line pct + < /dev/null on the outer command (not multiline bash -c): multiline double-quoted
     # -c scripts produced empty stdout + rc 129 here. DEBIAN_FRONTEND + LC_* for apt/locale in config stage.

@@ -11,7 +11,7 @@ apt install -y openjdk-17-jdk-headless curl wget jsvc mongodb
 # links; there is no apt repo at repo.tp-link.com). Filenames may be omada_v* or Omada_Network_Application_v*.
 PAGE='https://www.tp-link.com/us/support/download/omada-software-controller/'
 HTML=$(curl -fsSL -A 'Mozilla/5.0' "$PAGE")
-OMADA_URL=$(echo "$HTML" | grep -oE 'https://static\.tp-link\.com/upload/[^"<>[:space:]]+\.deb' | head -n 1)
+OMADA_URL=$(echo "$HTML" | grep -oE 'https://static\.tp-link\.com/upload/[^"]+\.deb' | head -n 1)
 test -n "$OMADA_URL"
 OMADA_DEB=$(basename "$OMADA_URL")
 OMADA_VER=$(echo "$OMADA_DEB" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || echo unknown)

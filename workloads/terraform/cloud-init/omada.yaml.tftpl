@@ -1,15 +1,13 @@
 #cloud-config
 # Rendered by Terraform (templatefile).
-# Install matches common/terraform/scripts/install_omada.sh: scrape the US download page for a
-# https://static.tp-link.com/upload/software/.../*.deb URL (there is no apt repo at repo.tp-link.com).
-# Prefers a URL containing 6.2.0.17 when present; otherwise first .deb on the page.
+# Uses the exact package that the Omada .deb preinst script requires: openjdk-17-jre-headless.
+# The deb is now hardcoded to a known-good 6.2.0.17 release from static.tp-link.com.
 hostname: omada
 fqdn: omada.brewnix.lan
 
 bootcmd:
   - [ ssh-keygen, -A ]
 
-# Match default_user to the only cloud-config user (Debian cloud.cfg defaults to debian).
 system_info:
   default_user:
     name: ansible
@@ -24,41 +22,45 @@ users:
 package_update: true
 package_upgrade: true
 
-# Same deps as common/terraform/scripts/install_omada.sh (Omada .deb + runtime).
 packages:
   - curl
   - wget
-  - openjdk-17-jdk-headless
+  - openjdk-17-jre-headless
   - jsvc
-  - mongodb
 
 runcmd:
   - |
+    #!/bin/bash
     set -euo pipefail
-    PAGE='https://www.tp-link.com/us/support/download/omada-software-controller/'
-    for h in www.tp-link.com static.tp-link.com; do
-      if ! getent hosts "$h" >/dev/null 2>&1; then
-        echo >&2 "Omada: cannot resolve $h — fix CT DNS, then re-run the snippet playbook."
-        exit 1
-      fi
-    done
-    HTML=$(curl -fsSL -A 'Mozilla/5.0' "$PAGE")
-    OMADA_URL=$(echo "$HTML" | grep -oE 'https://static\.tp-link\.com/upload/[^"<>[:space:]]+\.deb' | grep -F '6.2.0.17' | head -1) || true
-    if [ -z "${OMADA_URL:-}" ]; then
-      OMADA_URL=$(echo "$HTML" | grep -oE 'https://static\.tp-link\.com/upload/[^"<>[:space:]]+\.deb' | head -1)
-    fi
-    if [ -z "${OMADA_URL:-}" ]; then
-      echo >&2 "Omada: could not find a .deb URL on $PAGE (page layout may have changed)."
-      exit 1
-    fi
-    echo "Omada: downloading ${OMADA_URL}"
-    cd /tmp
-    DEB=$(basename "$OMADA_URL")
-    curl -fSL -o "$DEB" "$OMADA_URL"
-    dpkg -i "$DEB" || true
-    DEBIAN_FRONTEND=noninteractive apt-get -f install -y
+    echo "=== Omada install starting ===" >&2
+    export DEBIAN_FRONTEND=noninteractive
+
+    # Recover from any interrupted dpkg state (common after container reboot mid-install)
+    dpkg --configure -a 2>/dev/null || true
+    dpkg --remove --force-remove-reinstreq omadac 2>/dev/null || true
+    rm -f /etc/apt/sources.list.d/tplink.list 2>/dev/null || true
+
+    apt-get update -qq
+    apt-get install -y gnupg curl wget
+
+    curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc \
+      | gpg --batch --yes --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg
+    echo "deb [signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg] http://repo.mongodb.org/apt/debian bookworm/mongodb-org/7.0 main" \
+      > /etc/apt/sources.list.d/mongodb-org-7.0.list
+    apt-get update -qq
+    apt-get install -y openjdk-17-jre-headless jsvc mongodb-org-server
+
+    DEB_URL="https://static.tp-link.com/upload/software/2026/202604/20260402/Omada_Network_Application_v6.2.0.17_linux_x64_20260331104746.deb"
+    DEB="/tmp/$$(basename "$$DEB_URL")"
+    echo "Downloading from: $$DEB_URL" >&2
+    [ -f "$$DEB" ] || wget -q --show-progress -O "$$DEB" "$$DEB_URL"
+    echo "Installing $$DEB..." >&2
+    dpkg -i "$$DEB" || true
+    apt-get -f install -y
+    echo "Enabling and starting omada service..." >&2
     systemctl enable omada
     systemctl start omada
+    echo "=== Omada install completed ===" >&2
 
 write_files:
   - path: /etc/systemd/system/omada.service.d/override.conf

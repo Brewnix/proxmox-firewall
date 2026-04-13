@@ -1,13 +1,13 @@
 #cloud-config
 # Rendered by Terraform (templatefile) — do not edit the uploaded copy on Proxmox by hand; change .tftpl and apply.
-# Target Tailscale: 1.96.4 (apt pin). Repo URL uses Debian codename from /etc/os-release.
+# Uses userspace networking by default because Proxmox LXC kernels often lack the tun module.
+# This avoids the repeated "CreateTUN failed; /dev/net/tun does not exist" crash.
 hostname: tailscale
 fqdn: tailscale.brewnix.lan
 
 bootcmd:
   - [ ssh-keygen, -A ]
 
-# Match default_user to the only cloud-config user (Debian cloud.cfg defaults to debian).
 system_info:
   default_user:
     name: ansible
@@ -25,20 +25,39 @@ package_upgrade: true
 packages:
   - curl
 
-runcmd:
-  - bash -lc 'CODENAME=$(. /etc/os-release && echo "$VERSION_CODENAME"); curl -fsSL "https://pkgs.tailscale.com/stable/debian/$${CODENAME}.noarmor.gpg" | tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null; curl -fsSL "https://pkgs.tailscale.com/stable/debian/$${CODENAME}.tailscale-keyring.list" | tee /etc/apt/sources.list.d/tailscale.list'
-  - apt-get update
-  - apt-get install -y 'tailscale=1.96.4*'
-%{ if tailscale_auth_key != "" ~}
-  - bash -lc 'tailscale up --authkey=${tailscale_auth_key} --advertise-routes=${tailscale_advertise_routes} --accept-routes'
-%{ else ~}
-  - echo "terraform: tailscale_auth_key empty — run: tailscale up --authkey=tskey-auth-... (or set tailscale_auth_key and re-apply this snippet)"
-%{ endif ~}
-  - echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
-  - sysctl -p
-
 write_files:
-  - path: /etc/systemd/system/tailscale.service.d/override.conf
+  - path: /etc/default/tailscaled
     content: |
-      [Service]
-      Environment=TS_EXTRA_ARGS=--advertise-routes=${tailscale_advertise_routes}
+      PORT="41641"
+      FLAGS="--tun=userspace-networking"
+
+runcmd:
+  - |
+    #!/bin/bash
+    set -euo pipefail
+    . /etc/os-release
+    curl -fsSL "https://pkgs.tailscale.com/stable/debian/$${VERSION_CODENAME}.noarmor.gpg" | tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null
+    curl -fsSL "https://pkgs.tailscale.com/stable/debian/$${VERSION_CODENAME}.tailscale-keyring.list" | tee /etc/apt/sources.list.d/tailscale.list
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get install -y 'tailscale=1.96.4*'
+    grep -q '^net.ipv4.ip_forward=1' /etc/sysctl.conf || echo 'net.ipv4.ip_forward=1' >> /etc/sysctl.conf
+    sysctl -w net.ipv4.ip_forward=1
+    systemctl daemon-reload
+    systemctl enable tailscaled
+    systemctl start tailscaled
+    for i in $(seq 1 30); do
+      if systemctl is-active --quiet tailscaled && { [ -S /var/run/tailscale/tailscaled.sock ] || [ -S /run/tailscale/tailscaled.sock ]; }; then
+        break
+      fi
+      sleep 1
+    done
+    if ! systemctl is-active --quiet tailscaled; then
+      echo >&2 "tailscaled.service failed to start. Logs:"
+      journalctl -u tailscaled -n 50 --no-pager >&2
+      exit 1
+    fi
+%{ if tailscale_auth_key != "" ~}
+    tailscale up --authkey=${tailscale_auth_key} --advertise-routes=${tailscale_advertise_routes} --accept-routes
+%{ else ~}
+    echo "terraform: tailscale_auth_key empty — run: tailscale up --authkey=tskey-auth-... (or set tailscale_auth_key and re-apply this snippet)"
+%{ endif ~}

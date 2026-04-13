@@ -30,9 +30,9 @@ variable "lxc_bridge" {
   type        = string
   default     = "vmbr2"
   description = <<-EOT
-    Linux bridge for Pi-hole / Tailscale / Omada LXCs. vmbr4 matches the "Omada trunk" layout in main.tf.
+    Linux bridge for Pi-hole / Tailscale / Omada LXCs. vmbr3 matches the "Omada AP trunk" layout in main.tf.
     For a flat 192.168.0.x home LAN where the Proxmox host and ISP router share nic2 (main LAN), use vmbr2
-    so the CT shares L2 with 192.168.0.1. CTs on vmbr4 when the gateway only exists on vmbr2 get
+    so the CT shares L2 with 192.168.0.1. CTs on vmbr3 when the gateway only exists on vmbr2 get
     Destination Host Unreachable to the router — wrong bridge, not DNS.
   EOT
 }
