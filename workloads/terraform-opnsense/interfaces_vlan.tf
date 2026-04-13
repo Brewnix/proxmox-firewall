@@ -37,7 +37,7 @@ resource "opnsense_interfaces_vlan" "cameras_vlan20" {
   description = "Cameras"
   tag         = 20
   priority    = 4
-  parent      = "vtnet3"
+  parent      = "vtnet4" # Camera switch (nic4/vmbr4) — wired cameras (vlan013/CAM_20)
 }
 
 resource "opnsense_interfaces_vlan" "management_vlan50" {
@@ -64,8 +64,8 @@ resource "opnsense_interfaces_vlan" "management_vlan50_2" {
 resource "opnsense_interfaces_vlan" "cameras_vlan20_1" {
   description = "Cameras"
   tag         = 20
-  priority    = 4
-  parent      = "vtnet4"
+  priority    = 2
+  parent      = "vtnet3" # Omada AP trunk (nic3/vmbr3) — WiFi cameras (vlan05/CAMWIFI_20)
 }
 
 resource "opnsense_interfaces_vlan" "main_wifi_vlan10" {
