@@ -102,8 +102,9 @@ resource "proxmox_virtual_environment_vm" "opnsense" {
   }
 
   network_device {
-    bridge = "vmbr2" # Main LAN (nic2)
+    bridge = "vmbr2" # LAN switch (nic2) — VLAN-aware trunk; native VLAN 10 for untagged devices
     model  = "virtio"
+    trunks = "10;20;30;50;60;70"
   }
 
   network_device {

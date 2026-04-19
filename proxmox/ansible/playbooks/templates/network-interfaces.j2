@@ -20,13 +20,15 @@ iface vmbr1 inet manual
     bridge-fd 0
     bridge-vlan-aware no
 
-# 3. Cottage Lan Switch (nic2) - Simple bridge with DHCP (current Ansible path)
+# 3. Cottage LAN Switch (nic2) — VLAN-aware trunk; untagged frames are native VLAN 10 (Main LAN)
+# The Proxmox host itself does not need an IP here; management is via vmbr3.50.
 auto vmbr2
-iface vmbr2 inet dhcp
+iface vmbr2 inet manual
     bridge-ports {{ lan_switch_port }}
     bridge-stp off
     bridge-fd 0
-    bridge-vlan-aware no
+    bridge-vlan-aware yes
+    bridge-vids 10 20 30 50 60 70
 
 # 4. Omada AP trunk (nic3) — all VLANs the APs need
 auto vmbr3
